@@ -1,0 +1,19 @@
+{
+  "name": "Matsuri Master",
+  "short_name": "Matsuri",
+  "description": "祭典・屋台営業管理 PWA",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
