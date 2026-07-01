@@ -181,7 +181,7 @@ export default function ProductManager() {
                   <div>
                     <strong>{category.name}</strong>
                     <div className="text-sm text-slate-600">
-                      {category.enabled ? "表示中" : "停止"} / 高峰 {category.showInHighTraffic ? "表示" : "非表示"}
+                      {category.enabled ? "表示中" : "停止"} / ピーク時 {category.showInHighTraffic ? "表示" : "非表示"}
                     </div>
                   </div>
                   <div className="flex gap-1">
@@ -217,7 +217,7 @@ export default function ProductManager() {
             </label>
             <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
               <input type="checkbox" checked={editingCategory.showInHighTraffic} onChange={(event) => setEditingCategory({ ...editingCategory, showInHighTraffic: event.target.checked })} />
-              高峰モードで表示
+              ピークモードで表示
             </label>
             <button onClick={submitCategory} className="min-h-14 rounded-lg bg-mint font-black text-slate-950">
               カテゴリを保存

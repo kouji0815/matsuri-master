@@ -12,7 +12,7 @@ export default function SettingsPanel() {
       <h2 className="text-2xl font-black">設定</h2>
       <div className="mt-4 space-y-4">
         <label className="flex items-center justify-between gap-3 rounded-lg bg-ink p-4 font-bold">
-          高峰モード
+          ピークモード
           <input
             type="checkbox"
             checked={settings.highTrafficMode}

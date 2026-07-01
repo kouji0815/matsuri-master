@@ -40,9 +40,9 @@ const emptySnapshot: DataSnapshot = {
 };
 
 const sessionStatusLabel: Record<Session["status"], string> = {
-  planned: "未开始",
-  open: "营业中",
-  closed: "已结束"
+  planned: "未開始",
+  open: "営業中",
+  closed: "終了"
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -181,7 +181,7 @@ export default function DataManager() {
   const exportFullBackup = async () => {
     const backup = await buildBackup();
     downloadTextFile(`matsuri-master-backup-${today()}.json`, JSON.stringify(backup, null, 2), "application/json;charset=utf-8");
-    setMessage("完整备份 JSON 已导出。");
+    setMessage("完全バックアップ JSON を書き出しました。");
   };
 
   const exportCurrentSessionJson = () => {
@@ -194,30 +194,30 @@ export default function DataManager() {
       costs: snapshot.costs.filter((cost) => cost.sessionId === selectedSession.id)
     };
     downloadTextFile(`matsuri-session-${safeFileName(selectedSession.name)}-${today()}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
-    setMessage("当前场次 JSON 已导出。");
+    setMessage("選択中の営業回 JSON を書き出しました。");
   };
 
   const exportAllSalesCsv = () => {
     downloadTextFile(`matsuri-sales-all-${today()}.csv`, salesCsv(snapshot.sales, snapshot.sessions));
-    setMessage("全部销售 CSV 已导出。");
+    setMessage("全販売 CSV を書き出しました。");
   };
 
   const exportCurrentSessionCsv = () => {
     if (!selectedSession) return;
     downloadTextFile(`matsuri-sales-${safeFileName(selectedSession.name)}-${today()}.csv`, salesCsv(selectedSessionSales, snapshot.sessions));
-    setMessage("当前场次 CSV 已导出。");
+    setMessage("選択中の営業回 CSV を書き出しました。");
   };
 
   const importBackup = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!confirm("导入会覆盖当前本地数据，请确认是否继续。")) return;
+    if (!confirm("読み込みを行うと現在のローカルデータは上書きされます。続行しますか？")) return;
 
     try {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isBackupPayload(parsed)) {
-        setMessage("JSON 格式不正确，未导入。");
+        setMessage("JSON の形式が正しくありません。読み込みは行われませんでした。");
         return;
       }
       await db.transaction("rw", [db.categories, db.products, db.bundles, db.sessions, db.sales, db.costs, db.stockAdjustments, db.settings], async () => {
@@ -245,16 +245,16 @@ export default function DataManager() {
       await ensureSeedData();
       await refreshStore();
       await loadSnapshot();
-      setMessage("备份已导入并恢复。");
+      setMessage("バックアップを読み込み、データを復元しました。");
     } catch {
-      setMessage("导入失败。请确认文件是 Matsuri Master 的备份 JSON。");
+      setMessage("読み込みに失敗しました。Matsuri Master のバックアップ JSON か確認してください。");
     }
   };
 
   const clearAllData = async () => {
     if (deleteText !== "DELETE") return;
-    if (!confirm("清除前请先导出备份。确定继续吗？")) return;
-    if (!confirm("这是最后确认：将清除当前本地全部数据。")) return;
+    if (!confirm("消去前に必ず完全バックアップ JSON を書き出してください。続行しますか？")) return;
+    if (!confirm("最終確認です。現在のローカルデータをすべて消去します。")) return;
 
     await db.transaction("rw", [db.categories, db.products, db.bundles, db.sessions, db.sales, db.costs, db.stockAdjustments, db.settings], async () => {
       await Promise.all([
@@ -272,7 +272,7 @@ export default function DataManager() {
     await refreshStore();
     await loadSnapshot();
     setDeleteText("");
-    setMessage("本地数据已清除，并恢复初始数据。");
+    setMessage("ローカルデータを消去し、初期データを復元しました。");
   };
 
   return (
@@ -280,24 +280,24 @@ export default function DataManager() {
       <section className="rounded-lg border border-line bg-panel p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-black">数据管理</h2>
-            <p className="text-sm text-slate-600">查看、筛选、备份、恢复本机 IndexedDB 数据。</p>
+            <h2 className="text-2xl font-black">データ管理</h2>
+            <p className="text-sm text-slate-600">本端末の IndexedDB データを確認、絞り込み、バックアップ、復元できます。</p>
           </div>
           {message && <div className="rounded-md border border-mint bg-mint/15 px-3 py-2 font-bold text-emerald-700">{message}</div>}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Metric label="营业场次" value={`${snapshot.sessions.length}`} />
-          <Metric label="商品数量" value={`${snapshot.products.length}`} />
-          <Metric label="销售记录" value={`${snapshot.sales.length}`} />
-          <Metric label="成本记录" value={`${snapshot.costs.length}`} />
-          <Metric label="库存调整" value={`${snapshot.stockAdjustments.length}`} />
-          <Metric label="最新备份" value={latestBackupAt ? new Date(latestBackupAt).toLocaleString("ja-JP") : "未备份"} />
+          <Metric label="営業回数" value={`${snapshot.sessions.length}`} />
+          <Metric label="商品数" value={`${snapshot.products.length}`} />
+          <Metric label="販売記録数" value={`${snapshot.sales.length}`} />
+          <Metric label="コスト記録数" value={`${snapshot.costs.length}`} />
+          <Metric label="在庫調整数" value={`${snapshot.stockAdjustments.length}`} />
+          <Metric label="最新バックアップ" value={latestBackupAt ? new Date(latestBackupAt).toLocaleString("ja-JP") : "未作成"} />
         </div>
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <section className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="text-xl font-black">营业记录列表</h3>
+          <h3 className="text-xl font-black">営業履歴一覧</h3>
           <div className="mt-4 max-h-[620px] space-y-3 overflow-auto">
             {sessionSummaries.map(({ session, summary }) => (
               <button
@@ -318,9 +318,9 @@ export default function DataManager() {
                   <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{sessionStatusLabel[session.status]}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                  <Mini label="营收" value={yen(summary.revenue)} />
-                  <Mini label="销量" value={`${summary.quantity}`} />
-                  <Mini label="净利" value={yen(summary.netProfit)} />
+                  <Mini label="売上" value={yen(summary.revenue)} />
+                  <Mini label="販売数" value={`${summary.quantity}`} />
+                  <Mini label="純利益" value={yen(summary.netProfit)} />
                 </div>
               </button>
             ))}
@@ -330,30 +330,30 @@ export default function DataManager() {
         <section className="rounded-lg border border-line bg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-xl font-black">销售记录查看</h3>
-              <p className="text-sm text-slate-600">{selectedSession ? `当前场次：${selectedSession.name}` : "请选择场次"}</p>
+              <h3 className="text-xl font-black">販売記録</h3>
+              <p className="text-sm text-slate-600">{selectedSession ? `選択中の営業回：${selectedSession.name}` : "営業回を選択してください"}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={exportFullBackup} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white">
-                完整备份 JSON
+                完全バックアップ JSON
               </button>
               <button onClick={exportCurrentSessionJson} disabled={!selectedSession} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white disabled:bg-slate-300">
-                当前场次 JSON
+                選択中の営業回 JSON
               </button>
               <button onClick={exportAllSalesCsv} className="rounded-md bg-mint px-4 py-3 font-black text-slate-950">
-                全部销售 CSV
+                全販売 CSV
               </button>
               <button onClick={exportCurrentSessionCsv} disabled={!selectedSession} className="rounded-md bg-mint px-4 py-3 font-black text-slate-950 disabled:bg-slate-300">
-                当前场次 CSV
+                選択中の営業回 CSV
               </button>
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-4">
             <label className="text-sm font-bold text-slate-600">
-              场次
+              営業回
               <select value={filters.sessionId} onChange={(event) => setFilters({ ...filters, sessionId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3">
-                <option value="">全部</option>
+                <option value="">すべて</option>
                 {snapshot.sessions.map((session) => (
                   <option key={session.id} value={session.id}>
                     {session.name}
@@ -362,13 +362,13 @@ export default function DataManager() {
               </select>
             </label>
             <label className="text-sm font-bold text-slate-600">
-              日期
+              日付
               <input type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3" />
             </label>
             <label className="text-sm font-bold text-slate-600">
               商品
               <select value={filters.productId} onChange={(event) => setFilters({ ...filters, productId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3">
-                <option value="">全部</option>
+                <option value="">すべて</option>
                 {snapshot.products.map((product) => (
                   <option key={product.id} value={product.id}>
                     {product.name}
@@ -377,9 +377,9 @@ export default function DataManager() {
               </select>
             </label>
             <label className="text-sm font-bold text-slate-600">
-              分类
+              カテゴリ
               <select value={filters.categoryId} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3">
-                <option value="">全部</option>
+                <option value="">すべて</option>
                 {snapshot.categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -393,7 +393,7 @@ export default function DataManager() {
             <table className="w-full min-w-[920px] border-collapse text-sm">
               <thead className="sticky top-0 bg-slate-100 text-left">
                 <tr>
-                  {["时间", "商品名", "数量", "单价", "小计", "成本", "利润", "所属场次", "分类"].map((item) => (
+                  {["時間", "商品名", "数量", "単価", "小計", "原価", "利益", "営業回", "カテゴリ"].map((item) => (
                     <th key={item} className="border-b border-line p-3">
                       {item}
                     </th>
@@ -425,28 +425,28 @@ export default function DataManager() {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="text-xl font-black">数据导入</h3>
-          <p className="mt-1 text-sm text-slate-600">支持导入完整备份 JSON。导入会覆盖当前本地数据。</p>
+          <h3 className="text-xl font-black">データ読み込み</h3>
+          <p className="mt-1 text-sm text-slate-600">完全バックアップ JSON を読み込めます。読み込みを行うと現在のローカルデータは上書きされます。</p>
           <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={importBackup} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-md bg-slate-700 px-5 py-3 font-bold text-white">
-            选择备份 JSON 导入
+            バックアップ JSON を選択
           </button>
         </div>
 
         <div className="rounded-lg border border-danger bg-danger/10 p-4">
-          <h3 className="text-xl font-black text-danger">数据清除</h3>
-          <p className="mt-1 text-sm text-slate-700">清除前请先导出完整备份 JSON。输入 DELETE 后才允许清除。</p>
+          <h3 className="text-xl font-black text-danger">データ消去</h3>
+          <p className="mt-1 text-sm text-slate-700">消去前に完全バックアップ JSON を書き出してください。DELETE と入力した場合のみ消去できます。</p>
           <input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="DELETE" className="mt-3 w-full rounded-md border border-line bg-white p-3" />
           <button disabled={deleteText !== "DELETE"} onClick={clearAllData} className="mt-3 w-full rounded-md bg-danger py-3 font-black text-white disabled:bg-slate-300">
-            清除本地全部数据
+            ローカルデータをすべて消去
           </button>
         </div>
       </section>
 
       <section className="rounded-lg border border-line bg-panel p-4">
-        <h3 className="text-lg font-black">iPad 使用说明</h3>
+        <h3 className="text-lg font-black">iPad 利用時の注意</h3>
         <p className="mt-1 text-slate-700">
-          本 App 的数据保存在当前 iPad 的浏览器本地。更换设备或清除浏览器数据前，请先导出备份 JSON。
+          本アプリのデータは、現在使用している iPad のブラウザ内に保存されます。端末を変更する前、またはブラウザデータを消去する前に、必ずバックアップ JSON を書き出してください。
         </p>
       </section>
     </div>

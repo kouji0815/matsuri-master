@@ -4,12 +4,12 @@ import type { AppMode } from "@/types";
 import { useAppStore } from "@/store/useAppStore";
 
 const modes: { id: AppMode; label: string }[] = [
-  { id: "today", label: "当天经营" },
-  { id: "menu", label: "菜单・库存" },
-  { id: "cost", label: "成本管理" },
-  { id: "review", label: "复盘" },
-  { id: "data", label: "数据管理" },
-  { id: "settings", label: "设置" }
+  { id: "today", label: "本日の営業" },
+  { id: "menu", label: "メニュー・在庫" },
+  { id: "cost", label: "コスト管理" },
+  { id: "review", label: "振り返り" },
+  { id: "data", label: "データ管理" },
+  { id: "settings", label: "設定" }
 ];
 
 export default function ModeSwitcher() {
