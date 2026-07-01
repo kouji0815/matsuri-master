@@ -5,7 +5,7 @@ import { getHourlySales, getSaleSummary, getTopProducts, yen } from "@/lib/calcu
 import { useAppStore } from "@/store/useAppStore";
 
 export default function ReviewDashboard() {
-  const { sessions, selectedSession, sales, costs, products, categories, selectSession, deleteSession } = useAppStore();
+  const { sessions, selectedSession, sales, costs, products, categories, costCategories, selectSession, deleteSession } = useAppStore();
   const summary = getSaleSummary(sales, costs);
   const top = getTopProducts(sales, 10);
   const hourly = getHourlySales(sales);
@@ -30,16 +30,24 @@ export default function ReviewDashboard() {
     .filter((stat) => stat.quantity > 0 || stat.revenue > 0)
     .sort((a, b) => b.revenue - a.revenue);
 
+  const costCategoryStats = costCategories
+    .map((category) => ({
+      name: category.name,
+      amount: costs.filter((cost) => cost.costCategoryId === category.id).reduce((sum, cost) => sum + cost.amount, 0)
+    }))
+    .filter((item) => item.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+
   const exportCsv = () => {
     downloadTextFile(`matsuri-review-${selectedSession?.date ?? "session"}.csv`, salesToCsv(sales, selectedSession));
   };
 
   const removeSession = async (sessionId: string, sessionName: string, isOpen: boolean) => {
     if (isOpen) {
-      alert("営業中の回は削除できません。先に収店してください。");
+      alert("営業中の場次は削除できません。先に終了してください。");
       return;
     }
-    if (confirm(`${sessionName} を削除しますか？売上とコスト記録も削除されます。`)) {
+    if (confirm(`${sessionName} を削除しますか？販売とコストも削除対象になります。`)) {
       await deleteSession(sessionId);
     }
   };
@@ -47,13 +55,13 @@ export default function ReviewDashboard() {
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
       <aside className="no-print rounded-lg border border-line bg-panel p-4">
-        <h2 className="text-xl font-black">営業履歴</h2>
+        <h2 className="text-xl font-black text-white">営業場次</h2>
         <div className="mt-4 space-y-2">
           {sessions.map((session) => (
-            <div key={session.id} className={`rounded-md p-2 ${selectedSession?.id === session.id ? "bg-mint/20" : "bg-white"}`}>
-              <button onClick={() => void selectSession(session.id)} className="w-full rounded-md p-2 text-left text-slate-950">
+            <div key={session.id} className={`rounded-md p-2 ${selectedSession?.id === session.id ? "bg-mint/20" : "bg-slate-900"}`}>
+              <button onClick={() => void selectSession(session.id)} className="w-full rounded-md p-2 text-left text-white">
                 <div className="font-black">{session.name}</div>
-                <div className="text-sm text-slate-500">{session.date}</div>
+                <div className="text-sm text-slate-300">{session.date}</div>
               </button>
               <button onClick={() => void removeSession(session.id, session.name, session.status === "open")} className="mt-1 w-full rounded-md bg-danger py-2 text-sm font-black text-white">
                 削除
@@ -67,8 +75,8 @@ export default function ReviewDashboard() {
         <div className="rounded-lg border border-line bg-panel p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black">{selectedSession?.name ?? "営業回を選択"}</h2>
-              <p className="text-sm text-slate-500">
+              <h2 className="text-2xl font-black text-white">{selectedSession?.name ?? "場次を選択してください"}</h2>
+              <p className="text-sm text-slate-300">
                 {selectedSession?.date} {selectedSession?.location ? `/ ${selectedSession.location}` : ""}
               </p>
             </div>
@@ -91,35 +99,35 @@ export default function ReviewDashboard() {
           <Metric label="利益率" value={`${(summary.profitRate * 100).toFixed(1)}%`} />
           <Metric label="商品原価" value={yen(summary.variableCost)} />
           <Metric label="固定費" value={yen(summary.fixedCost)} />
-          <Metric label="注文数" value={`${sales.length}件`} />
+          <Metric label="会計数" value={`${sales.length}件`} />
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
           <section className="rounded-lg border border-line bg-panel p-4">
-            <h3 className="text-xl font-black">カテゴリ別集計</h3>
+            <h3 className="text-xl font-black text-white">分類別売上</h3>
             <div className="mt-4 space-y-2">
               {categoryStats.map((item, index) => (
-                <div key={item.categoryName} className="rounded-md bg-white p-3">
+                <div key={item.categoryName} className="rounded-md bg-slate-900 p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <strong>
+                    <strong className="text-white">
                       {index + 1}. {item.categoryName}
                     </strong>
-                    <span className="font-black text-emerald-700">{yen(item.revenue)}</span>
+                    <span className="font-black text-emerald-300">{yen(item.revenue)}</span>
                   </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    数量 {item.quantity}点 / 利益 {yen(item.profit)}
+                  <div className="mt-1 text-sm text-slate-300">
+                    販売数 {item.quantity}点 / 利益 {yen(item.profit)}
                   </div>
                 </div>
               ))}
-              {categoryStats.length === 0 && <p className="text-slate-500">カテゴリ別データがありません。</p>}
+              {categoryStats.length === 0 && <p className="text-slate-300">分類データがありません。</p>}
             </div>
           </section>
 
           <section className="rounded-lg border border-line bg-panel p-4">
-            <h3 className="text-xl font-black">商品別ランキング</h3>
+            <h3 className="text-xl font-black text-white">商品ランキング</h3>
             <div className="mt-4 space-y-2">
               {top.map((item, index) => (
-                <div key={item.name} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 rounded-md bg-white p-3">
+                <div key={item.name} className="grid grid-cols-[40px_1fr_auto] items-center gap-3 rounded-md bg-slate-900 p-3 text-white">
                   <strong>{index + 1}</strong>
                   <span>{item.name}</span>
                   <span className="text-right">
@@ -131,47 +139,69 @@ export default function ReviewDashboard() {
           </section>
 
           <section className="rounded-lg border border-line bg-panel p-4">
-            <h3 className="text-xl font-black">時間帯別売上</h3>
+            <h3 className="text-xl font-black text-white">時間別売上</h3>
             <div className="mt-4 space-y-3">
               {hourly.map(([hour, value]) => (
                 <div key={hour}>
-                  <div className="mb-1 flex justify-between text-sm">
+                  <div className="mb-1 flex justify-between text-sm text-white">
                     <span>{hour}</span>
                     <strong>{yen(value)}</strong>
                   </div>
-                  <div className="h-3 rounded-full bg-white">
+                  <div className="h-3 rounded-full bg-slate-800">
                     <div className="h-3 rounded-full bg-mint" style={{ width: `${(value / maxHour) * 100}%` }} />
                   </div>
                 </div>
               ))}
-              {hourly.length === 0 && <p className="text-slate-500">売上データがありません。</p>}
+              {hourly.length === 0 && <p className="text-slate-300">売上データがありません。</p>}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-line bg-panel p-4">
+            <h3 className="text-xl font-black text-white">分類別コスト</h3>
+            <div className="mt-4 space-y-2">
+              {costCategoryStats.map((item, index) => (
+                <div key={item.name} className="rounded-md bg-slate-900 p-3">
+                  <div className="flex items-center justify-between text-white">
+                    <strong>
+                      {index + 1}. {item.name}
+                    </strong>
+                    <span className="font-black text-amber-300">{yen(item.amount)}</span>
+                  </div>
+                </div>
+              ))}
+              {costCategoryStats.length === 0 && <p className="text-slate-300">コスト分類データがありません。</p>}
             </div>
           </section>
         </div>
 
         <section className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="text-xl font-black">残在庫</h3>
+          <h3 className="text-xl font-black text-white">残り在庫</h3>
           <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
             {products.map((product) => (
-              <div key={product.id} className="rounded-md bg-white p-3">
-                <div className="font-black">
+              <div key={product.id} className="rounded-md bg-slate-900 p-3">
+                <div className="font-black text-white">
                   {product.icon} {product.name}
                 </div>
-                <div className="text-sm text-slate-500">残 {product.currentStock}</div>
+                <div className="text-sm text-slate-300">残 {product.currentStock}</div>
               </div>
             ))}
           </div>
         </section>
 
         <section className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="text-xl font-black">コスト明細</h3>
+          <h3 className="text-xl font-black text-white">コスト明細</h3>
           <div className="mt-3 space-y-2">
-            {costs.map((cost) => (
-              <div key={cost.id} className="flex items-center justify-between rounded-md bg-white p-3">
-                <span>{cost.name}</span>
-                <strong>{yen(cost.amount)}</strong>
-              </div>
-            ))}
+            {costs.map((cost) => {
+              const categoryName = costCategories.find((category) => category.id === cost.costCategoryId)?.name ?? "その他";
+              return (
+                <div key={cost.id} className="flex items-center justify-between rounded-md bg-slate-900 p-3 text-white">
+                  <span>
+                    {cost.name} / {categoryName}
+                  </span>
+                  <strong>{yen(cost.amount)}</strong>
+                </div>
+              );
+            })}
           </div>
         </section>
       </section>
@@ -182,8 +212,8 @@ export default function ReviewDashboard() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-line bg-panel p-4">
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-black">{value}</div>
+      <div className="text-sm text-slate-300">{label}</div>
+      <div className="mt-1 text-2xl font-black text-white">{value}</div>
     </div>
   );
 }

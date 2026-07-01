@@ -7,6 +7,14 @@ import { useAppStore } from "@/store/useAppStore";
 
 const now = () => new Date().toISOString();
 
+const baseSync = () => ({
+  workspaceId: "",
+  deviceId: "",
+  syncStatus: "pending" as const,
+  updatedAt: now(),
+  deletedAt: null as string | null
+});
+
 const blankProduct = (category = "cat-skewer"): Product => ({
   id: `prod-${crypto.randomUUID()}`,
   name: "",
@@ -18,7 +26,8 @@ const blankProduct = (category = "cat-skewer"): Product => ({
   currentStock: 0,
   warningStock: 5,
   enabled: true,
-  updatedAt: now()
+  createdAt: now(),
+  ...baseSync()
 });
 
 const blankCategory = (sortOrder: number): ProductCategory => ({
@@ -27,7 +36,8 @@ const blankCategory = (sortOrder: number): ProductCategory => ({
   enabled: true,
   sortOrder,
   showInHighTraffic: false,
-  updatedAt: now()
+  createdAt: now(),
+  ...baseSync()
 });
 
 const blankBundle = (): BundleRule => ({
@@ -40,7 +50,8 @@ const blankBundle = (): BundleRule => ({
   allowedCategoryIds: ["cat-skewer"],
   discountAmount: 0,
   enabled: true,
-  updatedAt: now()
+  createdAt: now(),
+  ...baseSync()
 });
 
 export default function ProductManager() {

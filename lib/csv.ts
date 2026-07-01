@@ -1,16 +1,6 @@
 import type { SaleRecord, Session } from "@/types";
 
-const header = [
-  "時間",
-  "商品名",
-  "数量",
-  "単価",
-  "単価原価",
-  "売上小計",
-  "原価小計",
-  "利益小計",
-  "営業回"
-];
+const header = ["時間", "商品名", "数量", "単価", "単個原価", "小計売上", "小計原価", "小計利益", "場次名"];
 
 const escapeCsv = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
 

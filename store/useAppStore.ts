@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { db, ensureSeedData } from "@/lib/db";
 import { saveCustomerDisplay } from "@/lib/customerDisplay";
+import { getOrCreateDeviceId, getOrCreateWorkspaceId, setWorkspaceId as persistWorkspaceId } from "@/lib/localIdentity";
+import { getSyncStatus, pullRemoteChanges, pushLocalChanges, syncAll } from "@/lib/syncService";
 import type {
   AppMode,
   AppSettings,
   BundleRule,
   CartItem,
   CheckoutInput,
+  CostCategory,
   CostRecord,
   CurrentCheckoutDisplay,
   Product,
@@ -15,7 +18,8 @@ import type {
   SaleRecord,
   Session,
   StockAdjustment,
-  StockReason
+  StockReason,
+  SyncOverview
 } from "@/types";
 
 type AppState = {
@@ -23,6 +27,7 @@ type AppState = {
   loading: boolean;
   products: Product[];
   categories: ProductCategory[];
+  costCategories: CostCategory[];
   bundles: BundleRule[];
   sessions: Session[];
   activeSession?: Session;
@@ -33,14 +38,22 @@ type AppState = {
   settings: AppSettings;
   cartItems: CartItem[];
   checkoutDisplay: CurrentCheckoutDisplay;
+  syncOverview: SyncOverview;
   setMode: (mode: AppMode) => void;
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
+  refreshSyncOverview: () => Promise<void>;
+  runSyncAll: () => Promise<void>;
+  runPushSync: () => Promise<void>;
+  runPullSync: () => Promise<void>;
+  disconnectCloudSync: () => Promise<void>;
   saveProduct: (product: Product) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
   saveCategory: (category: ProductCategory) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   moveCategory: (categoryId: string, direction: "up" | "down") => Promise<void>;
+  saveCostCategory: (category: CostCategory) => Promise<void>;
+  deleteCostCategory: (categoryId: string) => Promise<void>;
   saveBundle: (bundle: BundleRule) => Promise<void>;
   deleteBundle: (bundleId: string) => Promise<void>;
   addProductToCart: (productId: string) => { ok: boolean; message?: string };
@@ -67,7 +80,14 @@ const baseSettings: AppSettings = {
   id: "main",
   highTrafficMode: false,
   soundEnabled: true,
-  defaultTargetSales: 100000
+  defaultTargetSales: 100000,
+  workspaceId: getOrCreateWorkspaceId(),
+  deviceId: getOrCreateDeviceId(),
+  cloudSyncEnabled: true,
+  createdAt: now(),
+  updatedAt: now(),
+  syncStatus: "pending",
+  deletedAt: null
 };
 
 const emptyDisplay: CurrentCheckoutDisplay = {
@@ -82,12 +102,23 @@ const emptyDisplay: CurrentCheckoutDisplay = {
   paymentMethod: "cash"
 };
 
+const emptySyncOverview: SyncOverview = {
+  connected: false,
+  online: true,
+  status: "idle",
+  pendingCount: 0,
+  failedCount: 0,
+  workspaceId: baseSettings.workspaceId,
+  deviceId: baseSettings.deviceId
+};
+
 const newestOpenSession = (sessions: Session[]) =>
   sessions
-    .filter((session) => session.status === "open")
+    .filter((session) => !session.deletedAt && session.status === "open")
     .sort((a, b) => (b.startedAt ?? b.createdAt).localeCompare(a.startedAt ?? a.createdAt))[0];
 
-const newestSession = (sessions: Session[]) => [...sessions].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+const newestSession = (sessions: Session[]) =>
+  [...sessions].filter((session) => !session.deletedAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 
 async function readSessionData(sessionId?: string) {
   if (!sessionId) return { sales: [], costs: [] };
@@ -95,7 +126,10 @@ async function readSessionData(sessionId?: string) {
     db.sales.where("sessionId").equals(sessionId).reverse().sortBy("createdAt"),
     db.costs.where("sessionId").equals(sessionId).sortBy("date")
   ]);
-  return { sales: sales.reverse(), costs };
+  return {
+    sales: sales.reverse().filter((sale) => !sale.deletedAt),
+    costs: costs.filter((cost) => !cost.deletedAt)
+  };
 }
 
 function buildSaleItem(product: Product, quantity: number, unitPrice: number): SaleItem {
@@ -144,7 +178,11 @@ function cartProductCounts(cartItems: CartItem[]) {
   return counts;
 }
 
-function buildDisplay(cartItems: CartItem[], input?: Partial<CheckoutInput>, status: CurrentCheckoutDisplay["status"] = "editing"): CurrentCheckoutDisplay {
+function buildDisplay(
+  cartItems: CartItem[],
+  input?: Partial<CheckoutInput>,
+  status: CurrentCheckoutDisplay["status"] = "editing"
+): CurrentCheckoutDisplay {
   const subtotal = cartSubtotal(cartItems);
   const discountAmount = Math.max(0, input?.discountAmount ?? 0);
   const finalTotal = Math.max(0, subtotal - discountAmount);
@@ -175,11 +213,45 @@ function publishDisplay(display: CurrentCheckoutDisplay) {
   saveCustomerDisplay(display);
 }
 
+function withSync<T extends { id: string; createdAt?: string; workspaceId?: string; deviceId?: string; deletedAt?: string | null }>(
+  value: T,
+  settings: AppSettings
+): T & {
+  createdAt: string;
+  workspaceId: string;
+  deviceId: string;
+  updatedAt: string;
+  syncStatus: "pending";
+  deletedAt: string | null;
+} {
+  return {
+    ...value,
+    createdAt: value.createdAt ?? now(),
+    workspaceId: settings.workspaceId,
+    deviceId: settings.deviceId,
+    updatedAt: now(),
+    syncStatus: "pending",
+    deletedAt: value.deletedAt ?? null
+  } as T & {
+    createdAt: string;
+    workspaceId: string;
+    deviceId: string;
+    updatedAt: string;
+    syncStatus: "pending";
+    deletedAt: string | null;
+  };
+}
+
+async function softDelete(table: any, id: string) {
+  await table.update(id, { deletedAt: now(), updatedAt: now(), syncStatus: "pending" });
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   mode: "today",
   loading: true,
   products: [],
   categories: [],
+  costCategories: [],
   bundles: [],
   sessions: [],
   sales: [],
@@ -188,6 +260,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settings: baseSettings,
   cartItems: [],
   checkoutDisplay: emptyDisplay,
+  syncOverview: emptySyncOverview,
 
   setMode: (mode) => set({ mode }),
 
@@ -195,19 +268,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     await ensureSeedData();
     await get().refresh();
     publishDisplay(get().checkoutDisplay);
+    await get().refreshSyncOverview();
     set({ loading: false });
   },
 
   refresh: async () => {
-    const [products, categories, bundles, sessions, settings, adjustments] = await Promise.all([
+    const [products, categories, costCategories, bundles, sessions, settings, adjustments] = await Promise.all([
       db.products.toArray(),
       db.categories.toArray(),
+      db.costCategories.toArray(),
       db.bundles.toArray(),
       db.sessions.toArray(),
       db.settings.get("main"),
       db.stockAdjustments.reverse().sortBy("createdAt")
     ]);
-    const sortedSessions = sessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const aliveSessions = sessions.filter((session) => !session.deletedAt);
+    const sortedSessions = aliveSessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const activeSession = newestOpenSession(sortedSessions);
     const selectedSession = get().selectedSession
       ? sortedSessions.find((session) => session.id === get().selectedSession?.id)
@@ -215,32 +291,113 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { sales, costs } = await readSessionData(selectedSession?.id);
 
     set({
-      products: products.sort((a, b) => a.name.localeCompare(b.name, "ja")),
-      categories: categories.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja")),
-      bundles: bundles.sort((a, b) => a.name.localeCompare(b.name, "ja")),
+      products: products.filter((item) => !item.deletedAt).sort((a, b) => a.name.localeCompare(b.name, "ja")),
+      categories: categories
+        .filter((item) => !item.deletedAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja")),
+      costCategories: costCategories
+        .filter((item) => !item.deletedAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja")),
+      bundles: bundles.filter((item) => !item.deletedAt).sort((a, b) => a.name.localeCompare(b.name, "ja")),
       sessions: sortedSessions,
       activeSession,
       selectedSession,
       sales,
       costs,
-      adjustments,
+      adjustments: adjustments.filter((item) => !item.deletedAt),
       settings: settings ?? baseSettings
     });
   },
 
-  saveProduct: async (product) => {
-    await db.products.put({ ...product, updatedAt: now() });
+  refreshSyncOverview: async () => {
+    const settings = get().settings;
+    const overview = await getSyncStatus(settings.workspaceId, settings);
+    set({ syncOverview: overview });
+  },
+
+  runSyncAll: async () => {
+    const settings = get().settings;
+    if (!settings.cloudSyncEnabled) {
+      await get().refreshSyncOverview();
+      return;
+    }
+    set((state) => ({ syncOverview: { ...state.syncOverview, status: "syncing" } }));
+    try {
+      await syncAll(settings.workspaceId);
+      await get().refresh();
+      await get().refreshSyncOverview();
+    } catch (error) {
+      set((state) => ({
+        syncOverview: {
+          ...state.syncOverview,
+          status: "error",
+          lastError: error instanceof Error ? error.message : "同期に失敗しました。"
+        }
+      }));
+    }
+  },
+
+  runPushSync: async () => {
+    const settings = get().settings;
+    set((state) => ({ syncOverview: { ...state.syncOverview, status: "syncing" } }));
+    try {
+      await pushLocalChanges(settings.workspaceId);
+      await db.settings.update("main", { lastSyncAt: now(), updatedAt: now(), syncStatus: "synced", cloudSyncedAt: now() });
+      await get().refresh();
+      await get().refreshSyncOverview();
+    } catch (error) {
+      set((state) => ({
+        syncOverview: {
+          ...state.syncOverview,
+          status: "error",
+          lastError: error instanceof Error ? error.message : "アップロードに失敗しました。"
+        }
+      }));
+    }
+  },
+
+  runPullSync: async () => {
+    const settings = get().settings;
+    set((state) => ({ syncOverview: { ...state.syncOverview, status: "syncing" } }));
+    try {
+      await pullRemoteChanges(settings.workspaceId);
+      await db.settings.update("main", { lastSyncAt: now(), updatedAt: now(), syncStatus: "synced", cloudSyncedAt: now() });
+      await get().refresh();
+      await get().refreshSyncOverview();
+    } catch (error) {
+      set((state) => ({
+        syncOverview: {
+          ...state.syncOverview,
+          status: "error",
+          lastError: error instanceof Error ? error.message : "クラウド取得に失敗しました。"
+        }
+      }));
+    }
+  },
+
+  disconnectCloudSync: async () => {
+    const next = withSync({ ...get().settings, cloudSyncEnabled: false }, get().settings);
+    await db.settings.put(next);
     await get().refresh();
+    await get().refreshSyncOverview();
+  },
+
+  saveProduct: async (product) => {
+    await db.products.put(withSync(product, get().settings));
+    await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   deleteProduct: async (productId) => {
-    await db.products.delete(productId);
+    await softDelete(db.products, productId);
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   saveCategory: async (category) => {
-    await db.categories.put({ ...category, updatedAt: now() });
+    await db.categories.put(withSync(category, get().settings));
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   deleteCategory: async (categoryId) => {
@@ -248,11 +405,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     await db.transaction("rw", [db.categories, db.products], async () => {
       if (fallback) {
         const products = await db.products.where("category").equals(categoryId).toArray();
-        await Promise.all(products.map((product) => db.products.update(product.id, { category: fallback.id, updatedAt: now() })));
+        await Promise.all(
+          products.map((product) => db.products.update(product.id, { category: fallback.id, updatedAt: now(), syncStatus: "pending" }))
+        );
       }
-      await db.categories.delete(categoryId);
+      await softDelete(db.categories, categoryId);
     });
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   moveCategory: async (categoryId, direction) => {
@@ -263,28 +423,52 @@ export const useAppStore = create<AppState>((set, get) => ({
     const current = categories[index];
     const target = categories[swapIndex];
     await db.transaction("rw", db.categories, async () => {
-      await db.categories.update(current.id, { sortOrder: target.sortOrder, updatedAt: now() });
-      await db.categories.update(target.id, { sortOrder: current.sortOrder, updatedAt: now() });
+      await db.categories.update(current.id, { sortOrder: target.sortOrder, updatedAt: now(), syncStatus: "pending" });
+      await db.categories.update(target.id, { sortOrder: current.sortOrder, updatedAt: now(), syncStatus: "pending" });
     });
     await get().refresh();
+    await get().refreshSyncOverview();
+  },
+
+  saveCostCategory: async (category) => {
+    await db.costCategories.put(withSync(category, get().settings));
+    await get().refresh();
+    await get().refreshSyncOverview();
+  },
+
+  deleteCostCategory: async (categoryId) => {
+    const fallback = get().costCategories.find((category) => category.id === "cost-other") ?? get().costCategories.find((category) => category.id !== categoryId);
+    await db.transaction("rw", [db.costCategories, db.costs], async () => {
+      if (fallback) {
+        const costs = await db.costs.where("costCategoryId").equals(categoryId).toArray();
+        await Promise.all(
+          costs.map((cost) => db.costs.update(cost.id, { costCategoryId: fallback.id, updatedAt: now(), syncStatus: "pending" }))
+        );
+      }
+      await softDelete(db.costCategories, categoryId);
+    });
+    await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   saveBundle: async (bundle) => {
-    await db.bundles.put({ ...bundle, updatedAt: now() });
+    await db.bundles.put(withSync(bundle, get().settings));
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   deleteBundle: async (bundleId) => {
-    await db.bundles.delete(bundleId);
+    await softDelete(db.bundles, bundleId);
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   addProductToCart: (productId) => {
     const { products, cartItems } = get();
     const product = products.find((item) => item.id === productId);
-    if (!product || !product.enabled) return { ok: false, message: "販売できない商品です" };
+    if (!product || !product.enabled) return { ok: false, message: "販売できない商品です。" };
     const reserved = cartProductCounts(cartItems)[productId] ?? 0;
-    if (product.currentStock <= reserved) return { ok: false, message: "在庫が足りません" };
+    if (product.currentStock <= reserved) return { ok: false, message: "在庫が足りません。" };
 
     const existing = cartItems.find((item) => item.id === `product-${productId}`);
     const nextCart = existing
@@ -321,8 +505,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   addBundleToCart: (bundle, productIds, drinkId) => {
     const { products, cartItems } = get();
     const allIds = drinkId ? [...productIds, drinkId] : [...productIds];
-    if (productIds.length !== bundle.itemCount) return { ok: false, message: "必要な数を選択してください" };
-    if (bundle.includesDrink && !drinkId) return { ok: false, message: "ドリンクを選択してください" };
+    if (productIds.length !== bundle.itemCount) return { ok: false, message: "必要な本数を選択してください。" };
+    if (bundle.includesDrink && !drinkId) return { ok: false, message: "ドリンクを選択してください。" };
 
     const currentCounts = cartProductCounts(cartItems);
     const addingCounts = allIds.reduce<Record<string, number>>((acc, id) => {
@@ -332,18 +516,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     for (const [id, count] of Object.entries(addingCounts)) {
       const product = products.find((item) => item.id === id);
-      if (!product || !product.enabled) return { ok: false, message: "販売できない商品が含まれています" };
-      if (product.currentStock < (currentCounts[id] ?? 0) + count) return { ok: false, message: `${product.name} の在庫が足りません` };
+      if (!product || !product.enabled) return { ok: false, message: "販売できない商品が含まれています。" };
+      if (product.currentStock < (currentCounts[id] ?? 0) + count) return { ok: false, message: `${product.name} の在庫が足りません。` };
     }
 
     const items = groupProducts(products, allIds, bundle.price);
-    const detail = items.map((item) => `${item.productName}×${item.quantity}`).join("、");
+    const detail = items.map((item) => `${item.productName}×${item.quantity}`).join(" / ");
     const nextCart = [
       ...cartItems,
       {
         id: `bundle-${bundle.id}-${crypto.randomUUID()}`,
         name: bundle.name,
-        description: `${bundle.name}：${detail}`,
+        description: `${bundle.name}: ${detail}`,
         quantity: 1,
         unitPrice: bundle.price,
         totalPrice: bundle.price,
@@ -373,14 +557,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   checkoutCart: async (input) => {
-    const { activeSession, cartItems, products } = get();
-    if (!activeSession) return { ok: false, message: "営業中の回がありません" };
-    if (cartItems.length === 0) return { ok: false, message: "会計する商品がありません" };
+    const { activeSession, cartItems, products, settings } = get();
+    if (!activeSession) return { ok: false, message: "営業中の場次がありません。" };
+    if (cartItems.length === 0) return { ok: false, message: "会計する商品がありません。" };
 
     const counts = cartProductCounts(cartItems);
     for (const [id, count] of Object.entries(counts)) {
       const product = products.find((item) => item.id === id);
-      if (!product || product.currentStock < count) return { ok: false, message: `${product?.name ?? "商品"} の在庫が足りません` };
+      if (!product || product.currentStock < count) return { ok: false, message: `${product?.name ?? "商品"} の在庫が足りません。` };
     }
 
     const subtotal = cartSubtotal(cartItems);
@@ -389,41 +573,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     const receivedAmount = Math.max(0, input.receivedAmount);
     const changeAmount = input.paymentMethod === "cash" ? Math.max(0, receivedAmount - finalTotal) : 0;
     const totalCost = cartItems.reduce((sum, item) => sum + item.totalCost, 0);
+    const createdAt = now();
     const orderId = `ORD-${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14)}`;
 
-    const sale: SaleRecord = {
-      id: `sale-${crypto.randomUUID()}`,
-      orderId,
-      sessionId: activeSession.id,
-      createdAt: now(),
-      items: cartItems.flatMap((item) => item.items),
-      bundleId: cartItems.find((item) => item.bundleId)?.bundleId,
-      bundleName: cartItems.find((item) => item.bundleName)?.bundleName,
-      paymentMethod: input.paymentMethod,
-      discountAmount,
-      discountReason: input.discountReason,
-      receivedAmount,
-      changeAmount,
-      finalTotal,
-      totalRevenue: finalTotal,
-      totalCost,
-      grossProfit: finalTotal - totalCost
-    };
+    const sale: SaleRecord = withSync(
+      {
+        id: `sale-${crypto.randomUUID()}`,
+        orderId,
+        sessionId: activeSession.id,
+        createdAt,
+        items: cartItems.flatMap((item) => item.items),
+        bundleId: cartItems.find((item) => item.bundleId)?.bundleId,
+        bundleName: cartItems.find((item) => item.bundleName)?.bundleName,
+        paymentMethod: input.paymentMethod,
+        discountAmount,
+        discountReason: input.discountReason,
+        receivedAmount,
+        changeAmount,
+        finalTotal,
+        totalRevenue: finalTotal,
+        totalCost,
+        grossProfit: finalTotal - totalCost
+      },
+      settings
+    );
 
     await db.transaction("rw", db.products, db.sales, async () => {
       await Promise.all(
         Object.entries(counts).map(async ([id, count]) => {
           const product = products.find((item) => item.id === id);
-          if (product) await db.products.update(id, { currentStock: product.currentStock - count, updatedAt: now() });
+          if (product) {
+            await db.products.update(id, {
+              currentStock: product.currentStock - count,
+              updatedAt: now(),
+              syncStatus: "pending"
+            });
+          }
         })
       );
       await db.sales.put(sale);
     });
 
     const completedDisplay = buildDisplay(cartItems, { ...input, discountAmount, receivedAmount }, "completed");
+    await db.settings.update("main", { currentCheckoutDisplay: completedDisplay, updatedAt: now(), syncStatus: "pending" });
     set({ cartItems: [], checkoutDisplay: completedDisplay });
     publishDisplay(completedDisplay);
     await get().refresh();
+    await get().refreshSyncOverview();
     return { ok: true };
   },
 
@@ -434,56 +630,73 @@ export const useAppStore = create<AppState>((set, get) => ({
     await db.transaction("rw", db.products, db.sales, async () => {
       for (const item of latest.items) {
         const product = products.find((entry) => entry.id === item.productId);
-        if (product) await db.products.update(product.id, { currentStock: product.currentStock + item.quantity, updatedAt: now() });
+        if (product) {
+          await db.products.update(product.id, {
+            currentStock: product.currentStock + item.quantity,
+            updatedAt: now(),
+            syncStatus: "pending"
+          });
+        }
       }
-      await db.sales.delete(latest.id);
+      await softDelete(db.sales, latest.id);
     });
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   adjustStock: async (productId, delta, reason, note) => {
     const product = get().products.find((item) => item.id === productId);
     if (!product) return;
     const nextStock = Math.max(0, product.currentStock + delta);
-    const record: StockAdjustment = {
-      id: `adjust-${crypto.randomUUID()}`,
-      productId,
-      productName: product.name,
-      delta: nextStock - product.currentStock,
-      reason,
-      note,
-      createdAt: now()
-    };
+    const record: StockAdjustment = withSync(
+      {
+        id: `adjust-${crypto.randomUUID()}`,
+        productId,
+        productName: product.name,
+        delta: nextStock - product.currentStock,
+        reason,
+        note,
+        createdAt: now()
+      },
+      get().settings
+    );
     await db.transaction("rw", db.products, db.stockAdjustments, async () => {
-      await db.products.update(productId, { currentStock: nextStock, updatedAt: now() });
+      await db.products.update(productId, { currentStock: nextStock, updatedAt: now(), syncStatus: "pending" });
       await db.stockAdjustments.put(record);
     });
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   saveCost: async (cost) => {
-    await db.costs.put(cost);
+    await db.costs.put(withSync(cost, get().settings));
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   deleteCost: async (costId) => {
-    await db.costs.delete(costId);
+    await softDelete(db.costs, costId);
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   saveSession: async (session) => {
-    await db.sessions.put(session);
+    await db.sessions.put(withSync(session, get().settings));
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   deleteSession: async (sessionId) => {
     await db.transaction("rw", [db.sessions, db.sales, db.costs], async () => {
-      await db.sessions.delete(sessionId);
-      await db.sales.where("sessionId").equals(sessionId).delete();
-      await db.costs.where("sessionId").equals(sessionId).delete();
+      await softDelete(db.sessions, sessionId);
+      const sales = await db.sales.where("sessionId").equals(sessionId).toArray();
+      const costs = await db.costs.where("sessionId").equals(sessionId).toArray();
+      await Promise.all(sales.map((sale) => softDelete(db.sales, sale.id)));
+      await Promise.all(costs.map((cost) => softDelete(db.costs, cost.id)));
     });
     set({ selectedSession: undefined });
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   selectSession: async (sessionId) => {
@@ -495,38 +708,46 @@ export const useAppStore = create<AppState>((set, get) => ({
   startSession: async (sessionId) => {
     const products = get().products.filter((product) => product.enabled);
     const session = get().sessions.find((item) => item.id === sessionId);
-    if (!session) return { ok: false, message: "営業回が見つかりません" };
-    if (products.length === 0) return { ok: false, message: "有効な商品がありません" };
-    if (!products.some((product) => product.currentStock > 0)) return { ok: false, message: "販売できる在庫がありません" };
-    if (products.some((product) => product.price <= 0)) return { ok: false, message: "価格が未設定の商品があります" };
-    if (products.some((product) => product.unitCost < 0)) return { ok: false, message: "原価を確認してください" };
-    if (session.targetSales <= 0) return { ok: false, message: "売上目標を設定してください" };
+    if (!session) return { ok: false, message: "場次が見つかりません。" };
+    if (products.length === 0) return { ok: false, message: "有効な商品がありません。" };
+    if (!products.some((product) => product.currentStock > 0)) return { ok: false, message: "販売できる在庫がありません。" };
+    if (products.some((product) => product.price <= 0)) return { ok: false, message: "価格が未設定の商品があります。" };
+    if (products.some((product) => product.unitCost < 0)) return { ok: false, message: "原価を確認してください。" };
+    if (session.targetSales <= 0) return { ok: false, message: "売上目標を設定してください。" };
 
     await db.transaction("rw", db.sessions, async () => {
       const opened = get().sessions.filter((item) => item.status === "open");
-      await Promise.all(opened.map((item) => db.sessions.update(item.id, { status: "closed", endedAt: now() })));
-      await db.sessions.update(sessionId, { status: "open", startedAt: now(), endedAt: undefined });
+      await Promise.all(
+        opened.map((item) => db.sessions.update(item.id, { status: "closed", endedAt: now(), updatedAt: now(), syncStatus: "pending" }))
+      );
+      await db.sessions.update(sessionId, { status: "open", startedAt: now(), endedAt: undefined, updatedAt: now(), syncStatus: "pending" });
     });
     await get().refresh();
+    await get().refreshSyncOverview();
     return { ok: true };
   },
 
   closeActiveSession: async () => {
     const activeSession = get().activeSession;
     if (!activeSession) return;
-    await db.sessions.update(activeSession.id, { status: "closed", endedAt: now() });
+    await db.sessions.update(activeSession.id, { status: "closed", endedAt: now(), updatedAt: now(), syncStatus: "pending" });
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   updateSettings: async (settings) => {
-    await db.settings.put(settings);
+    const nextSettings = withSync(settings, settings);
+    persistWorkspaceId(nextSettings.workspaceId);
+    await db.settings.put(nextSettings);
     await get().refresh();
+    await get().refreshSyncOverview();
   },
 
   resetAllData: async () => {
-    await db.transaction("rw", [db.categories, db.products, db.bundles, db.sessions, db.sales, db.costs, db.stockAdjustments, db.settings], async () => {
+    await db.transaction("rw", [db.categories, db.costCategories, db.products, db.bundles, db.sessions, db.sales, db.costs, db.stockAdjustments, db.settings], async () => {
       await Promise.all([
         db.categories.clear(),
+        db.costCategories.clear(),
         db.products.clear(),
         db.bundles.clear(),
         db.sessions.clear(),
@@ -538,5 +759,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     await ensureSeedData();
     await get().refresh();
+    await get().refreshSyncOverview();
   }
 }));

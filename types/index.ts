@@ -8,16 +8,35 @@ export type StockReason = "loss" | "gift" | "countFix" | "other";
 
 export type PaymentMethod = "cash" | "paypay" | "creditCard" | "other";
 
-export type ProductCategory = {
+export type SyncStatus = "pending" | "synced" | "failed";
+
+export type SyncableFields = {
+  workspaceId: string;
+  deviceId: string;
+  syncStatus: SyncStatus;
+  updatedAt: string;
+  cloudSyncedAt?: string;
+  deletedAt?: string | null;
+};
+
+export type ProductCategory = SyncableFields & {
   id: string;
   name: string;
   enabled: boolean;
   sortOrder: number;
   showInHighTraffic: boolean;
-  updatedAt: string;
+  createdAt: string;
 };
 
-export type Product = {
+export type CostCategory = SyncableFields & {
+  id: string;
+  name: string;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type Product = SyncableFields & {
   id: string;
   name: string;
   icon: string;
@@ -28,10 +47,10 @@ export type Product = {
   currentStock: number;
   warningStock: number;
   enabled: boolean;
-  updatedAt: string;
+  createdAt: string;
 };
 
-export type BundleRule = {
+export type BundleRule = SyncableFields & {
   id: string;
   name: string;
   price: number;
@@ -41,10 +60,10 @@ export type BundleRule = {
   allowedCategoryIds: string[];
   discountAmount: number;
   enabled: boolean;
-  updatedAt: string;
+  createdAt: string;
 };
 
-export type Session = {
+export type Session = SyncableFields & {
   id: string;
   name: string;
   date: string;
@@ -68,7 +87,7 @@ export type SaleItem = {
   subtotalProfit: number;
 };
 
-export type SaleRecord = {
+export type SaleRecord = SyncableFields & {
   id: string;
   orderId: string;
   sessionId: string;
@@ -125,18 +144,19 @@ export type CurrentCheckoutDisplay = {
   message?: string;
 };
 
-export type CostRecord = {
+export type CostRecord = SyncableFields & {
   id: string;
   sessionId?: string;
   name: string;
   amount: number;
   type: CostType;
+  costCategoryId: string;
   note: string;
   date: string;
   createdAt: string;
 };
 
-export type StockAdjustment = {
+export type StockAdjustment = SyncableFields & {
   id: string;
   productId: string;
   productName: string;
@@ -146,12 +166,19 @@ export type StockAdjustment = {
   createdAt: string;
 };
 
-export type AppSettings = {
+export type AppSettings = SyncableFields & {
   id: "main";
+  createdAt: string;
   highTrafficMode: boolean;
   soundEnabled: boolean;
   defaultTargetSales: number;
   latestBackupAt?: string;
+  workspaceId: string;
+  deviceId: string;
+  cloudSyncEnabled: boolean;
+  lastSyncAt?: string;
+  supabaseUrl?: string;
+  currentCheckoutDisplay?: CurrentCheckoutDisplay;
 };
 
 export type SessionSummary = {
@@ -164,10 +191,23 @@ export type SessionSummary = {
   profitRate: number;
 };
 
+export type SyncOverview = {
+  connected: boolean;
+  online: boolean;
+  status: "idle" | "syncing" | "offline" | "error";
+  pendingCount: number;
+  failedCount: number;
+  lastSyncedAt?: string;
+  lastError?: string;
+  workspaceId: string;
+  deviceId: string;
+};
+
 export type BackupPayload = {
-  version: 1;
+  version: 2;
   exportedAt: string;
   categories: ProductCategory[];
+  costCategories: CostCategory[];
   products: Product[];
   bundles: BundleRule[];
   sessions: Session[];

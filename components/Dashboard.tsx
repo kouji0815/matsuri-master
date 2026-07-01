@@ -22,7 +22,12 @@ function makeQuickSession(targetSales: number): Session {
     location: "",
     targetSales,
     status: "planned",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    workspaceId: "",
+    deviceId: "",
+    updatedAt: new Date().toISOString(),
+    syncStatus: "pending",
+    deletedAt: null
   };
 }
 
