@@ -1,10 +1,14 @@
 import { create } from "zustand";
 import { db, ensureSeedData } from "@/lib/db";
+import { saveCustomerDisplay } from "@/lib/customerDisplay";
 import type {
   AppMode,
   AppSettings,
   BundleRule,
+  CartItem,
+  CheckoutInput,
   CostRecord,
+  CurrentCheckoutDisplay,
   Product,
   ProductCategory,
   SaleItem,
@@ -27,6 +31,8 @@ type AppState = {
   costs: CostRecord[];
   adjustments: StockAdjustment[];
   settings: AppSettings;
+  cartItems: CartItem[];
+  checkoutDisplay: CurrentCheckoutDisplay;
   setMode: (mode: AppMode) => void;
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -37,8 +43,11 @@ type AppState = {
   moveCategory: (categoryId: string, direction: "up" | "down") => Promise<void>;
   saveBundle: (bundle: BundleRule) => Promise<void>;
   deleteBundle: (bundleId: string) => Promise<void>;
-  sellProduct: (productId: string) => Promise<{ ok: boolean; message?: string }>;
-  sellBundle: (bundle: BundleRule, productIds: string[], drinkId?: string) => Promise<{ ok: boolean; message?: string }>;
+  addProductToCart: (productId: string) => { ok: boolean; message?: string };
+  addBundleToCart: (bundle: BundleRule, productIds: string[], drinkId?: string) => { ok: boolean; message?: string };
+  removeCartItem: (cartItemId: string) => void;
+  clearCart: () => void;
+  checkoutCart: (input: CheckoutInput) => Promise<{ ok: boolean; message?: string }>;
   undoLastSale: () => Promise<void>;
   adjustStock: (productId: string, delta: number, reason: StockReason, note: string) => Promise<void>;
   saveCost: (cost: CostRecord) => Promise<void>;
@@ -61,18 +70,27 @@ const baseSettings: AppSettings = {
   defaultTargetSales: 100000
 };
 
+const emptyDisplay: CurrentCheckoutDisplay = {
+  status: "editing",
+  updatedAt: now(),
+  items: [],
+  subtotal: 0,
+  discountAmount: 0,
+  finalTotal: 0,
+  receivedAmount: 0,
+  changeAmount: 0,
+  paymentMethod: "cash"
+};
+
 const newestOpenSession = (sessions: Session[]) =>
   sessions
     .filter((session) => session.status === "open")
     .sort((a, b) => (b.startedAt ?? b.createdAt).localeCompare(a.startedAt ?? a.createdAt))[0];
 
-const newestSession = (sessions: Session[]) =>
-  [...sessions].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+const newestSession = (sessions: Session[]) => [...sessions].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 
 async function readSessionData(sessionId?: string) {
-  if (!sessionId) {
-    return { sales: [], costs: [] };
-  }
+  if (!sessionId) return { sales: [], costs: [] };
   const [sales, costs] = await Promise.all([
     db.sales.where("sessionId").equals(sessionId).reverse().sortBy("createdAt"),
     db.costs.where("sessionId").equals(sessionId).sortBy("date")
@@ -112,6 +130,51 @@ function groupProducts(products: Product[], ids: string[], totalRevenue: number)
     .filter((item): item is SaleItem => Boolean(item));
 }
 
+function cartSubtotal(cartItems: CartItem[]) {
+  return cartItems.reduce((sum, item) => sum + item.totalPrice, 0);
+}
+
+function cartProductCounts(cartItems: CartItem[]) {
+  const counts: Record<string, number> = {};
+  for (const cartItem of cartItems) {
+    for (const item of cartItem.items) {
+      counts[item.productId] = (counts[item.productId] ?? 0) + item.quantity;
+    }
+  }
+  return counts;
+}
+
+function buildDisplay(cartItems: CartItem[], input?: Partial<CheckoutInput>, status: CurrentCheckoutDisplay["status"] = "editing"): CurrentCheckoutDisplay {
+  const subtotal = cartSubtotal(cartItems);
+  const discountAmount = Math.max(0, input?.discountAmount ?? 0);
+  const finalTotal = Math.max(0, subtotal - discountAmount);
+  const receivedAmount = Math.max(0, input?.receivedAmount ?? 0);
+  const paymentMethod = input?.paymentMethod ?? "cash";
+  const changeAmount = paymentMethod === "cash" ? Math.max(0, receivedAmount - finalTotal) : 0;
+
+  return {
+    status,
+    updatedAt: now(),
+    items: cartItems.map((item) => ({
+      name: item.name,
+      description: item.description,
+      quantity: item.quantity,
+      totalPrice: item.totalPrice
+    })),
+    subtotal,
+    discountAmount,
+    finalTotal,
+    receivedAmount,
+    changeAmount,
+    paymentMethod,
+    message: status === "completed" ? "ありがとうございました" : undefined
+  };
+}
+
+function publishDisplay(display: CurrentCheckoutDisplay) {
+  saveCustomerDisplay(display);
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   mode: "today",
   loading: true,
@@ -123,12 +186,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   costs: [],
   adjustments: [],
   settings: baseSettings,
+  cartItems: [],
+  checkoutDisplay: emptyDisplay,
 
   setMode: (mode) => set({ mode }),
 
   hydrate: async () => {
     await ensureSeedData();
     await get().refresh();
+    publishDisplay(get().checkoutDisplay);
     set({ loading: false });
   },
 
@@ -213,74 +279,150 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().refresh();
   },
 
-  sellProduct: async (productId) => {
-    const { activeSession, products } = get();
-    if (!activeSession) return { ok: false, message: "営業中の回がありません" };
+  addProductToCart: (productId) => {
+    const { products, cartItems } = get();
     const product = products.find((item) => item.id === productId);
     if (!product || !product.enabled) return { ok: false, message: "販売できない商品です" };
-    if (product.currentStock <= 0) return { ok: false, message: "在庫がありません" };
+    const reserved = cartProductCounts(cartItems)[productId] ?? 0;
+    if (product.currentStock <= reserved) return { ok: false, message: "在庫が足りません" };
 
-    const sale: SaleRecord = {
-      id: `sale-${crypto.randomUUID()}`,
-      sessionId: activeSession.id,
-      createdAt: now(),
-      items: [buildSaleItem(product, 1, product.price)],
-      totalRevenue: product.price,
-      totalCost: product.unitCost,
-      grossProfit: product.price - product.unitCost
-    };
-
-    await db.transaction("rw", db.products, db.sales, async () => {
-      await db.products.update(product.id, { currentStock: product.currentStock - 1, updatedAt: now() });
-      await db.sales.put(sale);
-    });
-    await get().refresh();
+    const existing = cartItems.find((item) => item.id === `product-${productId}`);
+    const nextCart = existing
+      ? cartItems.map((item) =>
+          item.id === existing.id
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+                totalPrice: item.totalPrice + product.price,
+                totalCost: item.totalCost + product.unitCost,
+                items: [buildSaleItem(product, item.quantity + 1, product.price)]
+              }
+            : item
+        )
+      : [
+          ...cartItems,
+          {
+            id: `product-${productId}`,
+            name: product.name,
+            description: product.name,
+            quantity: 1,
+            unitPrice: product.price,
+            totalPrice: product.price,
+            totalCost: product.unitCost,
+            items: [buildSaleItem(product, 1, product.price)]
+          }
+        ];
+    const display = buildDisplay(nextCart);
+    set({ cartItems: nextCart, checkoutDisplay: display });
+    publishDisplay(display);
     return { ok: true };
   },
 
-  sellBundle: async (bundle, productIds, drinkId) => {
-    const { activeSession, products } = get();
-    if (!activeSession) return { ok: false, message: "営業中の回がありません" };
+  addBundleToCart: (bundle, productIds, drinkId) => {
+    const { products, cartItems } = get();
     const allIds = drinkId ? [...productIds, drinkId] : [...productIds];
-    if (productIds.length !== bundle.itemCount) return { ok: false, message: "必要な本数を選んでください" };
-    if (bundle.includesDrink && !drinkId) return { ok: false, message: "ドリンクを選んでください" };
+    if (productIds.length !== bundle.itemCount) return { ok: false, message: "必要な数を選択してください" };
+    if (bundle.includesDrink && !drinkId) return { ok: false, message: "ドリンクを選択してください" };
 
-    const counts = allIds.reduce<Record<string, number>>((acc, id) => {
+    const currentCounts = cartProductCounts(cartItems);
+    const addingCounts = allIds.reduce<Record<string, number>>((acc, id) => {
       acc[id] = (acc[id] ?? 0) + 1;
       return acc;
     }, {});
 
-    for (const [id, count] of Object.entries(counts)) {
+    for (const [id, count] of Object.entries(addingCounts)) {
       const product = products.find((item) => item.id === id);
       if (!product || !product.enabled) return { ok: false, message: "販売できない商品が含まれています" };
-      if (product.currentStock < count) return { ok: false, message: `${product.name} の在庫が足りません` };
+      if (product.currentStock < (currentCounts[id] ?? 0) + count) return { ok: false, message: `${product.name} の在庫が足りません` };
     }
 
     const items = groupProducts(products, allIds, bundle.price);
-    const totalCost = items.reduce((sum, item) => sum + item.subtotalCost, 0);
+    const detail = items.map((item) => `${item.productName}×${item.quantity}`).join("、");
+    const nextCart = [
+      ...cartItems,
+      {
+        id: `bundle-${bundle.id}-${crypto.randomUUID()}`,
+        name: bundle.name,
+        description: `${bundle.name}：${detail}`,
+        quantity: 1,
+        unitPrice: bundle.price,
+        totalPrice: bundle.price,
+        totalCost: items.reduce((sum, item) => sum + item.subtotalCost, 0),
+        items,
+        bundleId: bundle.id,
+        bundleName: bundle.name
+      }
+    ];
+    const display = buildDisplay(nextCart);
+    set({ cartItems: nextCart, checkoutDisplay: display });
+    publishDisplay(display);
+    return { ok: true };
+  },
+
+  removeCartItem: (cartItemId) => {
+    const nextCart = get().cartItems.filter((item) => item.id !== cartItemId);
+    const display = buildDisplay(nextCart);
+    set({ cartItems: nextCart, checkoutDisplay: display });
+    publishDisplay(display);
+  },
+
+  clearCart: () => {
+    const display = buildDisplay([]);
+    set({ cartItems: [], checkoutDisplay: display });
+    publishDisplay(display);
+  },
+
+  checkoutCart: async (input) => {
+    const { activeSession, cartItems, products } = get();
+    if (!activeSession) return { ok: false, message: "営業中の回がありません" };
+    if (cartItems.length === 0) return { ok: false, message: "会計する商品がありません" };
+
+    const counts = cartProductCounts(cartItems);
+    for (const [id, count] of Object.entries(counts)) {
+      const product = products.find((item) => item.id === id);
+      if (!product || product.currentStock < count) return { ok: false, message: `${product?.name ?? "商品"} の在庫が足りません` };
+    }
+
+    const subtotal = cartSubtotal(cartItems);
+    const discountAmount = Math.max(0, Math.min(input.discountAmount, subtotal));
+    const finalTotal = Math.max(0, subtotal - discountAmount);
+    const receivedAmount = Math.max(0, input.receivedAmount);
+    const changeAmount = input.paymentMethod === "cash" ? Math.max(0, receivedAmount - finalTotal) : 0;
+    const totalCost = cartItems.reduce((sum, item) => sum + item.totalCost, 0);
+    const orderId = `ORD-${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14)}`;
+
     const sale: SaleRecord = {
       id: `sale-${crypto.randomUUID()}`,
+      orderId,
       sessionId: activeSession.id,
       createdAt: now(),
-      items,
-      bundleId: bundle.id,
-      bundleName: bundle.name,
-      totalRevenue: bundle.price,
+      items: cartItems.flatMap((item) => item.items),
+      bundleId: cartItems.find((item) => item.bundleId)?.bundleId,
+      bundleName: cartItems.find((item) => item.bundleName)?.bundleName,
+      paymentMethod: input.paymentMethod,
+      discountAmount,
+      discountReason: input.discountReason,
+      receivedAmount,
+      changeAmount,
+      finalTotal,
+      totalRevenue: finalTotal,
       totalCost,
-      grossProfit: bundle.price - totalCost
+      grossProfit: finalTotal - totalCost
     };
 
     await db.transaction("rw", db.products, db.sales, async () => {
       await Promise.all(
         Object.entries(counts).map(async ([id, count]) => {
           const product = products.find((item) => item.id === id);
-          if (product) {
-            await db.products.update(id, { currentStock: product.currentStock - count, updatedAt: now() });
-          }
+          if (product) await db.products.update(id, { currentStock: product.currentStock - count, updatedAt: now() });
         })
       );
       await db.sales.put(sale);
     });
+
+    const completedDisplay = buildDisplay(cartItems, { ...input, discountAmount, receivedAmount }, "completed");
+    set({ cartItems: [], checkoutDisplay: completedDisplay });
+    publishDisplay(completedDisplay);
     await get().refresh();
     return { ok: true };
   },
@@ -292,12 +434,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await db.transaction("rw", db.products, db.sales, async () => {
       for (const item of latest.items) {
         const product = products.find((entry) => entry.id === item.productId);
-        if (product) {
-          await db.products.update(product.id, {
-            currentStock: product.currentStock + item.quantity,
-            updatedAt: now()
-          });
-        }
+        if (product) await db.products.update(product.id, { currentStock: product.currentStock + item.quantity, updatedAt: now() });
       }
       await db.sales.delete(latest.id);
     });

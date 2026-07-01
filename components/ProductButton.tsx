@@ -9,9 +9,10 @@ type Props = {
   onSell: (productId: string) => void;
   onLongPress: (product: Product) => void;
   activeFlash?: boolean;
+  selectedQuantity?: number;
 };
 
-export default function ProductButton({ product, onSell, onLongPress, activeFlash }: Props) {
+export default function ProductButton({ product, onSell, onLongPress, activeFlash, selectedQuantity = 0 }: Props) {
   const timerRef = useRef<number | null>(null);
   const soldOut = product.currentStock <= 0;
   const warning = product.currentStock > 0 && product.currentStock <= product.warningStock;
@@ -48,6 +49,9 @@ export default function ProductButton({ product, onSell, onLongPress, activeFlas
       </div>
       <div className="mt-3 text-xl font-black">{product.name}</div>
       <div className="mt-1 text-lg font-bold text-slate-600">{yen(product.price)}</div>
+      <div className={`mt-2 rounded-md px-2 py-1 text-center text-sm font-black ${selectedQuantity > 0 ? "bg-mint text-slate-950" : "bg-slate-100 text-slate-600"}`}>
+        選択 {selectedQuantity}
+      </div>
     </button>
   );
 }

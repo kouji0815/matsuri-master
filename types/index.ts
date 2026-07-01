@@ -6,6 +6,8 @@ export type CostType = "fixed" | "purchase" | "supply" | "transport" | "other";
 
 export type StockReason = "loss" | "gift" | "countFix" | "other";
 
+export type PaymentMethod = "cash" | "paypay" | "creditCard" | "other";
+
 export type ProductCategory = {
   id: string;
   name: string;
@@ -68,14 +70,59 @@ export type SaleItem = {
 
 export type SaleRecord = {
   id: string;
+  orderId: string;
   sessionId: string;
   createdAt: string;
   items: SaleItem[];
   bundleId?: string;
   bundleName?: string;
+  paymentMethod: PaymentMethod;
+  discountAmount: number;
+  discountReason: string;
+  receivedAmount: number;
+  changeAmount: number;
+  finalTotal: number;
   totalRevenue: number;
   totalCost: number;
   grossProfit: number;
+};
+
+export type CartItem = {
+  id: string;
+  name: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  totalCost: number;
+  items: SaleItem[];
+  bundleId?: string;
+  bundleName?: string;
+};
+
+export type CheckoutInput = {
+  paymentMethod: PaymentMethod;
+  discountAmount: number;
+  discountReason: string;
+  receivedAmount: number;
+};
+
+export type CurrentCheckoutDisplay = {
+  status: "editing" | "confirming" | "completed";
+  updatedAt: string;
+  items: {
+    name: string;
+    description: string;
+    quantity: number;
+    totalPrice: number;
+  }[];
+  subtotal: number;
+  discountAmount: number;
+  finalTotal: number;
+  receivedAmount: number;
+  changeAmount: number;
+  paymentMethod: PaymentMethod;
+  message?: string;
 };
 
 export type CostRecord = {
