@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function SettingsPanel() {
   const { settings, updateSettings, resetAllData } = useAppStore();
   const [confirmText, setConfirmText] = useState("");
+  const [defaultTargetSalesText, setDefaultTargetSalesText] = useState(settings.defaultTargetSales === 0 ? "" : String(settings.defaultTargetSales));
+
+  useEffect(() => {
+    setDefaultTargetSalesText(settings.defaultTargetSales === 0 ? "" : String(settings.defaultTargetSales));
+  }, [settings.defaultTargetSales]);
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
@@ -27,8 +32,13 @@ export default function SettingsPanel() {
           既定の売上目標
           <input
             type="number"
-            value={settings.defaultTargetSales}
-            onChange={(event) => void updateSettings({ ...settings, defaultTargetSales: Number(event.target.value) })}
+            value={defaultTargetSalesText}
+            placeholder="0"
+            onChange={(event) => {
+              const next = event.target.value.replace(/^0+(?=\d)/, "");
+              setDefaultTargetSalesText(next);
+              void updateSettings({ ...settings, defaultTargetSales: Number(next || 0) });
+            }}
             className="mt-2 w-full rounded-md border border-line bg-panel p-3 text-slate-950"
           />
         </label>

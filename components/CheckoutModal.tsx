@@ -20,22 +20,23 @@ type Props = {
 export default function CheckoutModal({ onClose, onCompleted }: Props) {
   const { cartItems, checkoutCart } = useAppStore();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState("");
   const [discountReason, setDiscountReason] = useState("");
-  const [receivedAmount, setReceivedAmount] = useState(0);
+  const [receivedAmount, setReceivedAmount] = useState("");
   const [message, setMessage] = useState("");
 
   const subtotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.totalPrice, 0), [cartItems]);
-  const normalizedDiscount = Math.max(0, Math.min(discountAmount, subtotal));
+  const normalizedDiscount = Math.max(0, Math.min(Number(discountAmount || 0), subtotal));
   const finalTotal = Math.max(0, subtotal - normalizedDiscount);
-  const changeAmount = paymentMethod === "cash" ? Math.max(0, receivedAmount - finalTotal) : 0;
+  const receivedAmountNumber = Number(receivedAmount || 0);
+  const changeAmount = paymentMethod === "cash" ? Math.max(0, receivedAmountNumber - finalTotal) : 0;
 
   const confirm = async () => {
     const result = await checkoutCart({
       paymentMethod,
       discountAmount: normalizedDiscount,
       discountReason,
-      receivedAmount: paymentMethod === "cash" ? receivedAmount : finalTotal
+      receivedAmount: paymentMethod === "cash" ? receivedAmountNumber : finalTotal
     });
     if (!result.ok) {
       setMessage(result.message ?? "会計できませんでした");
@@ -84,7 +85,8 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
               <input
                 type="number"
                 value={discountAmount}
-                onChange={(event) => setDiscountAmount(Number(event.target.value))}
+                placeholder="0"
+                onChange={(event) => setDiscountAmount(event.target.value.replace(/^0+(?=\d)/, ""))}
                 className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950"
               />
             </label>
@@ -106,8 +108,9 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
               お預かり金額
               <input
                 type="number"
-                value={paymentMethod === "cash" ? receivedAmount : finalTotal}
-                onChange={(event) => setReceivedAmount(Number(event.target.value))}
+                value={paymentMethod === "cash" ? receivedAmount : String(finalTotal)}
+                placeholder="0"
+                onChange={(event) => setReceivedAmount(event.target.value.replace(/^0+(?=\d)/, ""))}
                 disabled={paymentMethod !== "cash"}
                 className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950 disabled:bg-slate-100 disabled:text-slate-500"
               />

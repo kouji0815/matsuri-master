@@ -308,10 +308,15 @@ function Field({
   type?: string;
   placeholder?: string;
 }) {
+  const displayValue = type === "number" && value === 0 ? "" : value;
+  const handleChange = (raw: string) => {
+    onChange(type === "number" ? raw.replace(/^0+(?=\d)/, "") : raw);
+  };
+
   return (
     <label className="text-sm font-bold text-slate-600">
       {label}
-      <input value={value} type={type} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950" />
+      <input value={displayValue} type={type} onChange={(event) => handleChange(event.target.value)} placeholder={placeholder ?? (type === "number" ? "0" : undefined)} className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950" />
     </label>
   );
 }

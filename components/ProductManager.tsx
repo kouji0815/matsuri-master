@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { BundleRule, Product, ProductCategory } from "@/types";
 import { yen } from "@/lib/calculations";
 import { useAppStore } from "@/store/useAppStore";
@@ -317,10 +317,22 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  const [text, setText] = useState(value === 0 ? "" : String(value));
+
+  useEffect(() => {
+    setText(value === 0 ? "" : String(value));
+  }, [value]);
+
+  const handleChange = (raw: string) => {
+    const next = raw.replace(/^0+(?=\d)/, "");
+    setText(next);
+    onChange(Number(next || 0));
+  };
+
   return (
     <label className="text-sm font-bold text-slate-600">
       {label}
-      <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950" />
+      <input type="number" value={text} placeholder="0" onChange={(event) => handleChange(event.target.value)} className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950" />
     </label>
   );
 }

@@ -18,7 +18,7 @@ const reasons: { value: StockReason; label: string }[] = [
 
 export default function StockAdjustModal({ product, onClose }: Props) {
   const adjustStock = useAppStore((state) => state.adjustStock);
-  const [custom, setCustom] = useState(0);
+  const [custom, setCustom] = useState("");
   const [reason, setReason] = useState<StockReason>("countFix");
   const [note, setNote] = useState("");
 
@@ -67,11 +67,11 @@ export default function StockAdjustModal({ product, onClose }: Props) {
           <input
             type="number"
             value={custom}
-            onChange={(event) => setCustom(Number(event.target.value))}
+            onChange={(event) => setCustom(event.target.value.replace(/^0+(?=\d)/, ""))}
             className="min-w-0 flex-1 rounded-md border border-line bg-ink p-3"
             placeholder="数量"
           />
-          <button onClick={() => apply(custom)} className="rounded-md bg-mint px-5 font-black text-slate-950">
+          <button onClick={() => apply(Number(custom || 0))} className="rounded-md bg-mint px-5 font-black text-slate-950">
             反映
           </button>
         </div>
