@@ -96,23 +96,18 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
             </label>
             <label className="block text-sm font-bold text-slate-600">
               割引理由
-              <div className="mt-1 flex flex-wrap gap-2">
-                {quickDiscountReasons.map((reason) => (
-                  <button
-                    key={reason}
-                    type="button"
-                    onClick={() => setDiscountReason(reason)}
-                    className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-bold text-slate-950 hover:border-mint"
-                  >
-                    {reason}
-                  </button>
-                ))}
-              </div>
               <input
+                list="discount-reason-options"
                 value={discountReason}
+                placeholder="よく使う理由から選択..."
                 onChange={(event) => setDiscountReason(event.target.value)}
-                className="mt-2 w-full rounded-md border border-line bg-white p-3 text-slate-950"
+                className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950"
               />
+              <datalist id="discount-reason-options">
+                {quickDiscountReasons.map((reason) => (
+                  <option key={reason} value={reason} />
+                ))}
+              </datalist>
             </label>
             <label className="block text-sm font-bold text-slate-600">
               支払い方法
