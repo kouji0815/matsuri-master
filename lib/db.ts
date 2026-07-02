@@ -10,6 +10,8 @@ import {
 } from "@/lib/seed";
 import type {
   AppSettings,
+  AutoBackupRecord,
+  BackupPayload,
   BundleRule,
   CostCategory,
   CostRecord,
@@ -20,6 +22,9 @@ import type {
   StockAdjustment,
   SyncStatus
 } from "@/types";
+
+const MAX_AUTO_BACKUPS = 5;
+const dataTables = ["categories", "costCategories", "products", "bundles", "sessions", "sales", "costs", "stockAdjustments", "settings"] as const;
 
 const now = () => new Date().toISOString();
 
@@ -52,6 +57,7 @@ class MatsuriDb extends Dexie {
   costs!: Table<CostRecord, string>;
   stockAdjustments!: Table<StockAdjustment, string>;
   settings!: Table<AppSettings, string>;
+  autoBackups!: Table<AutoBackupRecord, string>;
 
   constructor() {
     super("MatsuriMasterDb");
@@ -152,6 +158,18 @@ class MatsuriDb extends Dexie {
           );
         }
       });
+    this.version(5).stores({
+      categories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+      costCategories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+      products: "id, workspaceId, category, enabled, syncStatus, deletedAt, sortOrder",
+      bundles: "id, workspaceId, enabled, syncStatus, deletedAt",
+      sessions: "id, workspaceId, date, status, syncStatus, deletedAt",
+      sales: "id, workspaceId, sessionId, createdAt, syncStatus, deletedAt",
+      costs: "id, workspaceId, sessionId, date, type, costCategoryId, syncStatus, deletedAt",
+      stockAdjustments: "id, workspaceId, productId, createdAt, syncStatus, deletedAt",
+      settings: "id, workspaceId, syncStatus, updatedAt",
+      autoBackups: "id, createdAt"
+    });
   }
 }
 
@@ -260,4 +278,66 @@ export async function ensureSeedData() {
         })
       )
   );
+}
+
+async function buildBackupPayload(): Promise<BackupPayload> {
+  return {
+    version: 2,
+    exportedAt: now(),
+    categories: await db.categories.toArray(),
+    costCategories: await db.costCategories.toArray(),
+    products: await db.products.toArray(),
+    bundles: await db.bundles.toArray(),
+    sessions: await db.sessions.toArray(),
+    sales: await db.sales.toArray(),
+    costs: await db.costs.toArray(),
+    stockAdjustments: await db.stockAdjustments.toArray(),
+    settings: await db.settings.toArray()
+  };
+}
+
+// Snapshots every local table into db.autoBackups before a destructive operation (e.g. pulling
+// cloud data over local data), so the previous state can be restored if the operation was a mistake.
+// Keeps only the most recent MAX_AUTO_BACKUPS entries.
+export async function createAutoBackup(reason: string): Promise<AutoBackupRecord> {
+  const record: AutoBackupRecord = {
+    id: `autobackup-${crypto.randomUUID()}`,
+    createdAt: now(),
+    reason,
+    payload: await buildBackupPayload()
+  };
+  await db.autoBackups.put(record);
+
+  const all = await db.autoBackups.orderBy("createdAt").toArray();
+  const excess = all.slice(0, Math.max(0, all.length - MAX_AUTO_BACKUPS));
+  if (excess.length > 0) {
+    await db.autoBackups.bulkDelete(excess.map((item) => item.id));
+  }
+
+  return record;
+}
+
+export async function listAutoBackups(): Promise<AutoBackupRecord[]> {
+  return (await db.autoBackups.orderBy("createdAt").reverse().toArray());
+}
+
+// Replaces every local data table's contents with the given backup payload. Used both for
+// restoring a manually-imported JSON backup and for undoing a "クラウドから取得" overwrite via
+// an auto-backup snapshot. Never touches db.autoBackups itself.
+export async function restoreFromBackupPayload(payload: BackupPayload) {
+  await db.transaction("rw", dataTables.map((table) => db[table]), async () => {
+    await Promise.all(dataTables.map((table) => db[table].clear()));
+    await Promise.all([
+      db.categories.bulkPut(payload.categories),
+      db.costCategories.bulkPut(payload.costCategories),
+      db.products.bulkPut(payload.products),
+      db.bundles.bulkPut(payload.bundles),
+      db.sessions.bulkPut(payload.sessions),
+      db.sales.bulkPut(payload.sales),
+      db.costs.bulkPut(payload.costs),
+      db.stockAdjustments.bulkPut(payload.stockAdjustments),
+      db.settings.bulkPut(payload.settings)
+    ]);
+  });
+  await ensureSeedData();
 }

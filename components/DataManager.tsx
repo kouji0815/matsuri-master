@@ -1,12 +1,13 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { db, ensureSeedData } from "@/lib/db";
+import { createAutoBackup, db, ensureSeedData, listAutoBackups, restoreFromBackupPayload } from "@/lib/db";
 import { getSaleSummary, yen } from "@/lib/calculations";
 import { downloadTextFile } from "@/lib/csv";
 import { useAppStore } from "@/store/useAppStore";
 import type {
   AppSettings,
+  AutoBackupRecord,
   BackupPayload,
   BundleRule,
   CostCategory,
@@ -111,10 +112,15 @@ export default function DataManager() {
   const [deleteText, setDeleteText] = useState("");
   const [message, setMessage] = useState("");
   const [messageIsError, setMessageIsError] = useState(false);
+  const [autoBackups, setAutoBackups] = useState<AutoBackupRecord[]>([]);
 
   const showMessage = (text: string, isError = false) => {
     setMessage(text);
     setMessageIsError(isError);
+  };
+
+  const loadAutoBackups = async () => {
+    setAutoBackups(await listAutoBackups());
   };
 
   const loadSnapshot = async () => {
@@ -147,6 +153,7 @@ export default function DataManager() {
   useEffect(() => {
     void loadSnapshot();
     void refreshSyncOverview();
+    void loadAutoBackups();
   }, [refreshSyncOverview]);
 
   const sessionMap = useMemo(() => new Map(snapshot.sessions.map((session) => [session.id, session])), [snapshot.sessions]);
@@ -247,35 +254,26 @@ export default function DataManager() {
       }
       const normalizedCostCategories = "costCategories" in parsed && Array.isArray(parsed.costCategories) ? parsed.costCategories : [];
       const normalizedCosts = parsed.costs.map((cost) => ({ ...cost, costCategoryId: (cost as CostRecord).costCategoryId ?? "cost-other" }));
-      await db.transaction("rw", [db.categories, db.costCategories, db.products, db.bundles, db.sessions, db.sales, db.costs, db.stockAdjustments, db.settings], async () => {
-        await Promise.all([
-          db.categories.clear(),
-          db.costCategories.clear(),
-          db.products.clear(),
-          db.bundles.clear(),
-          db.sessions.clear(),
-          db.sales.clear(),
-          db.costs.clear(),
-          db.stockAdjustments.clear(),
-          db.settings.clear()
-        ]);
-        await Promise.all([
-          db.categories.bulkPut(parsed.categories),
-          db.costCategories.bulkPut(normalizedCostCategories),
-          db.products.bulkPut(parsed.products),
-          db.bundles.bulkPut(parsed.bundles),
-          db.sessions.bulkPut(parsed.sessions),
-          db.sales.bulkPut(parsed.sales),
-          db.costs.bulkPut(normalizedCosts),
-          db.stockAdjustments.bulkPut(parsed.stockAdjustments),
-          db.settings.bulkPut(parsed.settings)
-        ]);
+
+      await createAutoBackup("JSONバックアップ読み込み前の自動バックアップ");
+      await restoreFromBackupPayload({
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        categories: parsed.categories,
+        costCategories: normalizedCostCategories,
+        products: parsed.products,
+        bundles: parsed.bundles,
+        sessions: parsed.sessions,
+        sales: parsed.sales,
+        costs: normalizedCosts,
+        stockAdjustments: parsed.stockAdjustments,
+        settings: parsed.settings
       });
-      await ensureSeedData();
       await refresh();
       await loadSnapshot();
+      await loadAutoBackups();
       await refreshSyncOverview();
-      showMessage("バックアップを読み込みました。");
+      showMessage("バックアップを読み込みました。直前の状態は自動バックアップとして保存されています。");
     } catch {
       showMessage("読み込みに失敗しました。Matsuri Master の JSON バックアップを確認してください。", true);
     }
@@ -287,8 +285,34 @@ export default function DataManager() {
   };
 
   const handlePullSync = async () => {
+    if (
+      !confirm(
+        "クラウドのデータでこの端末のローカルデータを上書きします。この操作は元に戻せません（実行前の状態は自動バックアップに保存され、後から復元できます）。続行しますか？"
+      )
+    ) {
+      return;
+    }
+    await createAutoBackup("クラウドから取得前の自動バックアップ");
+    await loadAutoBackups();
     const result = await runPullSync();
     showMessage(result.message ?? (result.ok ? "クラウドから取得しました。" : "取得に失敗しました。"), !result.ok);
+  };
+
+  const handleRestoreAutoBackup = async (backup: AutoBackupRecord) => {
+    if (
+      !confirm(
+        `${new Date(backup.createdAt).toLocaleString("ja-JP")} 時点の自動バックアップに復元します。現在のローカルデータは上書きされます。続行しますか？`
+      )
+    ) {
+      return;
+    }
+    await createAutoBackup("バックアップ復元前の自動バックアップ");
+    await restoreFromBackupPayload(backup.payload);
+    await refresh();
+    await loadSnapshot();
+    await loadAutoBackups();
+    await refreshSyncOverview();
+    showMessage("自動バックアップから復元しました。");
   };
 
   const handlePushSync = async () => {
@@ -375,7 +399,7 @@ export default function DataManager() {
         {syncOverview.status === "error" && syncOverview.lastError && (
           <div className="mt-3 rounded-md border border-danger bg-danger/10 px-3 py-2 font-bold text-danger">{syncOverview.lastError}</div>
         )}
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             onClick={() => void handleSyncAll()}
             disabled={syncOverview.status === "syncing"}
@@ -384,23 +408,28 @@ export default function DataManager() {
             {syncOverview.status === "syncing" ? "同期中..." : "今すぐ同期"}
           </button>
           <button
-            onClick={() => void handlePullSync()}
-            disabled={syncOverview.status === "syncing"}
-            className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white disabled:bg-slate-300 disabled:text-slate-500"
-          >
-            {syncOverview.status === "syncing" ? "取得中..." : "クラウドから取得"}
-          </button>
-          <button
             onClick={() => void handlePushSync()}
             disabled={syncOverview.status === "syncing"}
             className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white disabled:bg-slate-300 disabled:text-slate-500"
           >
             {syncOverview.status === "syncing" ? "アップロード中..." : "ローカルをアップロード"}
           </button>
+          <div className="mx-1 h-8 w-px shrink-0 bg-line" aria-hidden="true" />
+          <button
+            onClick={() => void handlePullSync()}
+            disabled={syncOverview.status === "syncing"}
+            className="rounded-md border-2 border-danger bg-danger px-4 py-3 font-bold text-white disabled:border-slate-300 disabled:bg-slate-300 disabled:text-slate-500"
+            title="この端末のローカルデータをクラウドの内容で上書きします"
+          >
+            {syncOverview.status === "syncing" ? "取得中..." : "⚠️ クラウドから取得（上書き）"}
+          </button>
           <button onClick={() => void disconnectCloudSync()} className="rounded-md bg-danger px-4 py-3 font-bold text-white">
             クラウド同期を解除
           </button>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          「クラウドから取得」はローカルデータを上書きする操作です。実行前に確認ダイアログが表示され、実行前の状態は自動バックアップとして保存されます。
+        </p>
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
@@ -556,6 +585,29 @@ export default function DataManager() {
           </button>
           <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={importBackup} />
         </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <h4 className="font-black text-gray-900">自動バックアップから復元</h4>
+          <p className="mt-1 text-sm text-gray-500">
+            「クラウドから取得」やバックアップ読み込みなど、ローカルデータを上書きする操作の直前に自動保存されたスナップショットです（直近{" "}
+            {autoBackups.length > 0 ? autoBackups.length : 5}件まで保持）。
+          </p>
+          <div className="mt-3 space-y-2">
+            {autoBackups.map((backup) => (
+              <div key={backup.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-2">
+                <div>
+                  <div className="font-bold text-gray-900">{new Date(backup.createdAt).toLocaleString("ja-JP")}</div>
+                  <div className="text-xs text-gray-500">{backup.reason}</div>
+                </div>
+                <button onClick={() => void handleRestoreAutoBackup(backup)} className="rounded-md bg-amber px-3 py-2 text-sm font-black text-slate-950">
+                  この時点に復元
+                </button>
+              </div>
+            ))}
+            {autoBackups.length === 0 && <p className="text-sm text-gray-500">まだ自動バックアップはありません。</p>}
+          </div>
+        </div>
+
         <div className="mt-4 rounded-lg border border-danger bg-danger/10 p-4">
           <h4 className="font-black text-danger">ローカルデータ削除</h4>
           <p className="mt-1 text-sm text-slate-600">

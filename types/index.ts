@@ -218,3 +218,10 @@ export type BackupPayload = {
   stockAdjustments: StockAdjustment[];
   settings: AppSettings[];
 };
+
+export type AutoBackupRecord = {
+  id: string;
+  createdAt: string;
+  reason: string;
+  payload: BackupPayload;
+};

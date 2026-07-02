@@ -88,18 +88,48 @@ const entityFieldMaps: Record<LocalTable, Record<string, string>> = {
   }
 };
 
-// Local-only fields that have no matching column on the remote table and must never be sent.
-const remoteOmitFields: Partial<Record<LocalTable, string[]>> = {
-  products: ["sortOrder"],
-  settings: ["supabaseUrl"]
+// Explicit, fixed list of entity-specific fields to send for each table (excludes the common
+// SyncableFields, which are always handled separately, and local-only fields that have no
+// remote column, e.g. Product.sortOrder / AppSettings.supabaseUrl).
+//
+// Using a fixed list — instead of deriving keys dynamically from whatever properties happen to
+// exist on a given JS object — guarantees every row in a batch upsert has an identical, complete
+// set of keys. Some fields (Session.startedAt/endedAt, SaleRecord.bundleId/bundleName,
+// CostRecord.sessionId) are optional and may be genuinely absent as own-properties on older
+// records (e.g. created before the field existed, or restored from an older JSON backup).
+// PostgREST bulk upserts can fail or silently misalign columns when rows in the same batch have
+// different key sets, so every optional field must still be present (as null) on every row.
+const entityFields: Record<LocalTable, string[]> = {
+  categories: ["name", "enabled", "sortOrder", "showInHighTraffic"],
+  costCategories: ["name", "enabled", "sortOrder"],
+  products: ["name", "icon", "category", "price", "unitCost", "initialStock", "currentStock", "warningStock", "enabled"],
+  bundles: ["name", "price", "itemCount", "allowChoice", "includesDrink", "allowedCategoryIds", "discountAmount", "enabled"],
+  sessions: ["name", "date", "location", "startedAt", "endedAt", "targetSales", "status"],
+  sales: [
+    "orderId",
+    "sessionId",
+    "items",
+    "bundleId",
+    "bundleName",
+    "paymentMethod",
+    "discountAmount",
+    "discountReason",
+    "receivedAmount",
+    "changeAmount",
+    "finalTotal",
+    "totalRevenue",
+    "totalCost",
+    "grossProfit"
+  ],
+  costs: ["sessionId", "name", "amount", "type", "costCategoryId", "note", "date"],
+  stockAdjustments: ["productId", "productName", "delta", "reason", "note"],
+  settings: ["highTrafficMode", "soundEnabled", "defaultTargetSales", "latestBackupAt", "cloudSyncEnabled", "lastSyncAt", "currentCheckoutDisplay"]
 };
 
-const commonCamelFields = ["id", "workspaceId", "deviceId", "syncStatus", "createdAt", "updatedAt", "deletedAt", "cloudSyncedAt"];
 const commonSnakeFields = ["id", "workspace_id", "device_id", "sync_status", "created_at", "updated_at", "deleted_at", "cloud_synced_at"];
 
 function toRemoteRecord(local: LocalTable, record: SyncEntity) {
   const fieldMap = entityFieldMaps[local];
-  const omit = new Set(remoteOmitFields[local] ?? []);
   const result: Record<string, unknown> = {
     id: record.id,
     workspace_id: record.workspaceId,
@@ -111,10 +141,13 @@ function toRemoteRecord(local: LocalTable, record: SyncEntity) {
     cloud_synced_at: record.cloudSyncedAt ?? null
   };
 
-  for (const [key, value] of Object.entries(record)) {
-    if (commonCamelFields.includes(key) || omit.has(key)) continue;
+  const source = record as unknown as Record<string, unknown>;
+  for (const key of entityFields[local]) {
     const remoteKey = fieldMap[key] ?? key;
-    result[remoteKey] = value === undefined ? null : value;
+    let value = source[key];
+    if (value === undefined) value = null;
+    if (typeof value === "number" && Number.isNaN(value)) value = 0;
+    result[remoteKey] = value;
   }
   return result;
 }
@@ -182,9 +215,20 @@ export async function getSyncStatus(workspaceId: string, settings?: AppSettings)
   };
 }
 
+function describeSyncError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return "unknown error";
+}
+
 export async function pushLocalChanges(workspaceId: string) {
   const client = getSupabaseClient();
   if (!client || (typeof navigator !== "undefined" && !navigator.onLine)) return;
+
+  const failures: string[] = [];
 
   for (const { local, remote } of tableConfigs) {
     const table = db[local] as {
@@ -197,16 +241,22 @@ export async function pushLocalChanges(workspaceId: string) {
     );
     if (rows.length === 0) continue;
 
-    const payload = rows.map((row) => toRemoteRecord(local, row));
-    const { error } = await (client.from(remote) as never as { upsert: (rows: unknown[], options: { onConflict: string }) => Promise<{ error: Error | null }> }).upsert(payload, {
-      onConflict: "id"
-    });
-    if (error) {
-      await table.bulkPut(rows.map((row) => ({ ...row, syncStatus: "failed" })));
-      throw error;
-    }
+    try {
+      const payload = rows.map((row) => toRemoteRecord(local, row));
+      const { error } = await (client.from(remote) as never as { upsert: (rows: unknown[], options: { onConflict: string }) => Promise<{ error: Error | null }> }).upsert(payload, {
+        onConflict: "id"
+      });
+      if (error) throw error;
 
-    await table.bulkPut(rows.map((row) => ({ ...row, syncStatus: "synced", cloudSyncedAt: now() })));
+      await table.bulkPut(rows.map((row) => ({ ...row, syncStatus: "synced", cloudSyncedAt: now() })));
+    } catch (error) {
+      await table.bulkPut(rows.map((row) => ({ ...row, syncStatus: "failed" })));
+      failures.push(`${local}: ${describeSyncError(error)}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`一部のデータのアップロードに失敗しました (${failures.join(" / ")})`);
   }
 }
 
@@ -214,41 +264,66 @@ export async function pullRemoteChanges(workspaceId: string) {
   const client = getSupabaseClient();
   if (!client || (typeof navigator !== "undefined" && !navigator.onLine)) return;
 
+  const failures: string[] = [];
+
   for (const { local, remote } of tableConfigs) {
     const table = db[local] as {
       toArray: () => Promise<SyncEntity[]>;
       bulkPut: (records: SyncEntity[]) => Promise<unknown>;
     };
 
-    const [localRows, remoteResult] = await Promise.all([
-      table.toArray(),
-      client.from(remote).select("*").eq("workspace_id", workspaceId)
-    ]);
-    if (remoteResult.error) throw remoteResult.error;
-    const localMap = new Map(localRows.map((row) => [row.id, row]));
-    const merged: SyncEntity[] = [];
+    try {
+      const [localRows, remoteResult] = await Promise.all([
+        table.toArray(),
+        client.from(remote).select("*").eq("workspace_id", workspaceId)
+      ]);
+      if (remoteResult.error) throw remoteResult.error;
+      const localMap = new Map(localRows.map((row) => [row.id, row]));
+      const merged: SyncEntity[] = [];
 
-    for (const remoteRow of remoteResult.data ?? []) {
-      const normalized = fromRemoteRecord<SyncEntity>(local, remoteRow);
-      const resolved = await resolveConflict(localMap.get(normalized.id), normalized);
-      merged.push(resolved);
-      localMap.delete(normalized.id);
-    }
+      for (const remoteRow of remoteResult.data ?? []) {
+        const normalized = fromRemoteRecord<SyncEntity>(local, remoteRow);
+        const resolved = await resolveConflict(localMap.get(normalized.id), normalized);
+        merged.push(resolved);
+        localMap.delete(normalized.id);
+      }
 
-    for (const leftover of localMap.values()) {
-      merged.push(leftover);
-    }
+      for (const leftover of localMap.values()) {
+        merged.push(leftover);
+      }
 
-    if (merged.length > 0) {
-      await table.bulkPut(merged);
+      if (merged.length > 0) {
+        await table.bulkPut(merged);
+      }
+    } catch (error) {
+      failures.push(`${local}: ${describeSyncError(error)}`);
     }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`一部のデータの取得に失敗しました (${failures.join(" / ")})`);
   }
 }
 
 export async function syncAll(workspaceId: string) {
   const client = getSupabaseClient();
   if (!client || (typeof navigator !== "undefined" && !navigator.onLine)) return;
-  await pushLocalChanges(workspaceId);
-  await pullRemoteChanges(workspaceId);
+
+  const errors: string[] = [];
+  try {
+    await pushLocalChanges(workspaceId);
+  } catch (error) {
+    errors.push(describeSyncError(error));
+  }
+  try {
+    await pullRemoteChanges(workspaceId);
+  } catch (error) {
+    errors.push(describeSyncError(error));
+  }
+
   await db.settings.update("main", { lastSyncAt: now(), updatedAt: now(), syncStatus: "synced", cloudSyncedAt: now() });
+
+  if (errors.length > 0) {
+    throw new Error(errors.join(" / "));
+  }
 }
