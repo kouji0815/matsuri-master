@@ -87,7 +87,10 @@ export default function CostManager() {
   const total = costs.reduce((sum, cost) => sum + cost.amount, 0);
   const costCategoryMap = useMemo(() => new Map(costCategories.map((category) => [category.id, category.name])), [costCategories]);
   const filteredCosts = useMemo(
-    () => costs.filter((cost) => !filterCategoryId || cost.costCategoryId === filterCategoryId),
+    () =>
+      costs
+        .filter((cost) => !filterCategoryId || cost.costCategoryId === filterCategoryId)
+        .sort((a, b) => b.amount - a.amount),
     [costs, filterCategoryId]
   );
   const categoryTotals = useMemo(() => {
@@ -379,7 +382,7 @@ function CostListItem({
   const isMeat = isMeatCategoryName(categoryName);
   const unitPriceLabel = getCostUnitPriceLabel(cost, categoryName, meatUnitPriceBaseGrams);
   const [editingUnit, setEditingUnit] = useState(false);
-  const [draftMode, setDraftMode] = useState<CostUnitPriceMode>(cost.unitPriceMode ?? "gram");
+  const [draftMode, setDraftMode] = useState<CostUnitPriceMode>(cost.unitPriceMode ?? (isMeat ? "gram" : "piece"));
   const [draftBaseGrams, setDraftBaseGrams] = useState(String(cost.unitPriceBaseGrams ?? meatUnitPriceBaseGrams ?? 20));
 
   const applyMode = (mode: CostUnitPriceMode) => {
@@ -406,37 +409,33 @@ function CostListItem({
         </div>
         <div className="text-right">
           <strong className="text-amber-600">{yen(cost.amount)}</strong>
-          {isMeat ? (
-            editingUnit ? (
-              <div className="mt-1 flex items-center justify-end gap-1">
-                <select
-                  value={draftMode}
-                  onChange={(event) => applyMode(event.target.value as CostUnitPriceMode)}
-                  className="rounded-md border border-gray-300 bg-white px-1 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="gram">g</option>
-                  <option value="kilogram">kg</option>
-                  <option value="piece">個</option>
-                </select>
-                {draftMode === "gram" && (
-                  <input
-                    type="number"
-                    value={draftBaseGrams}
-                    onChange={(event) => applyBaseGrams(event.target.value)}
-                    className="w-16 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-                  />
-                )}
-                <button onClick={() => setEditingUnit(false)} className="rounded-md bg-slate-700 px-2 py-1 text-xs font-bold text-white">
-                  閉じる
-                </button>
-              </div>
-            ) : (
-              <button onClick={() => setEditingUnit(true)} className="mt-1 block text-sm font-bold text-gray-600 underline decoration-dotted">
-                単価 {unitPriceLabel ?? "設定"}
+          {editingUnit ? (
+            <div className="mt-1 flex items-center justify-end gap-1">
+              {draftMode === "gram" && (
+                <input
+                  type="number"
+                  value={draftBaseGrams}
+                  onChange={(event) => applyBaseGrams(event.target.value)}
+                  className="w-16 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                />
+              )}
+              <select
+                value={draftMode}
+                onChange={(event) => applyMode(event.target.value as CostUnitPriceMode)}
+                className="rounded-md border border-gray-300 bg-white px-1 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="gram">g</option>
+                <option value="kilogram">kg</option>
+                <option value="piece">個</option>
+              </select>
+              <button onClick={() => setEditingUnit(false)} className="rounded-md bg-slate-700 px-2 py-1 text-xs font-bold text-white">
+                閉じる
               </button>
-            )
+            </div>
           ) : (
-            unitPriceLabel && <p className="mt-1 text-sm font-bold text-gray-600">単価 {unitPriceLabel}</p>
+            <button onClick={() => setEditingUnit(true)} className="mt-1 block text-sm font-bold text-gray-600 underline decoration-dotted">
+              単価 {unitPriceLabel ?? "設定"}
+            </button>
           )}
         </div>
       </div>
