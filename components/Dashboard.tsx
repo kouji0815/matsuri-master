@@ -8,7 +8,6 @@ import SetOrderModal from "@/components/SetOrderModal";
 import StockAdjustModal from "@/components/StockAdjustModal";
 import { downloadTextFile, salesToCsv } from "@/lib/csv";
 import { getLowStockProducts, getRecentRevenue, getSaleSummary, getTopProducts, yen } from "@/lib/calculations";
-import { playSaleSound } from "@/lib/sound";
 import { useAppStore } from "@/store/useAppStore";
 import type { BundleRule, Product, Session } from "@/types";
 
@@ -96,7 +95,6 @@ export default function Dashboard() {
       setMessage(result.message ?? "カートに追加できませんでした");
       return;
     }
-    playSaleSound(settings.soundEnabled, product?.name.includes("ビール") ? "beer" : "normal");
     setFlashProductId(productId);
     setMessage(`${product?.name ?? "商品"}を会計に追加しました`);
     window.setTimeout(() => setFlashProductId(""), 220);

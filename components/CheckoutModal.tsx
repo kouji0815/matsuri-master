@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { yen } from "@/lib/calculations";
+import { playSaleSound } from "@/lib/sound";
 import { useAppStore } from "@/store/useAppStore";
 import type { PaymentMethod } from "@/types";
 
@@ -18,7 +19,7 @@ type Props = {
 };
 
 export default function CheckoutModal({ onClose, onCompleted }: Props) {
-  const { cartItems, checkoutCart } = useAppStore();
+  const { cartItems, checkoutCart, settings } = useAppStore();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [discountAmount, setDiscountAmount] = useState("");
   const [discountReason, setDiscountReason] = useState("");
@@ -42,6 +43,7 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
       setMessage(result.message ?? "会計できませんでした");
       return;
     }
+    playSaleSound(settings.soundEnabled);
     onCompleted();
   };
 

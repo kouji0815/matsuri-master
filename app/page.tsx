@@ -43,13 +43,13 @@ export default function Home() {
   }, [refreshSyncOverview, runSyncAll]);
 
   return (
-    <main className="min-h-screen bg-ink text-white">
+    <main className="min-h-screen bg-ink text-slate-950">
       <div className="mx-auto flex min-h-screen max-w-[1366px] flex-col gap-4 px-4 py-4 md:px-6">
         <header className="no-print flex items-center justify-between gap-3">
           <ModeSwitcher />
           <div className="text-right">
             <h1 className="text-xl font-black tracking-normal md:text-3xl">Matsuri Master</h1>
-            <p className="text-xs text-slate-300 md:text-sm">祭典・屋台営業管理</p>
+            <p className="text-xs text-slate-500 md:text-sm">祭典・屋台営業管理</p>
           </div>
         </header>
 

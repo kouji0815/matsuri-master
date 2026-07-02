@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import type { BundleRule } from "@/types";
 import { yen } from "@/lib/calculations";
-import { playSaleSound } from "@/lib/sound";
 import { useAppStore } from "@/store/useAppStore";
 
 type Props = {
@@ -12,7 +11,7 @@ type Props = {
 };
 
 export default function SetOrderModal({ bundle, onClose }: Props) {
-  const { products, settings, addBundleToCart } = useAppStore();
+  const { products, addBundleToCart } = useAppStore();
   const [selected, setSelected] = useState<string[]>([]);
   const [drinkId, setDrinkId] = useState("");
   const [message, setMessage] = useState("");
@@ -47,8 +46,6 @@ export default function SetOrderModal({ bundle, onClose }: Props) {
       setMessage(result.message ?? "カートに追加できませんでした");
       return;
     }
-    const drink = products.find((product) => product.id === drinkId);
-    playSaleSound(settings.soundEnabled, drink?.name.includes("ビール") ? "beer" : "normal");
     onClose();
   };
 

@@ -18,7 +18,7 @@ export default function SettingsPanel() {
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
-      <h2 className="text-2xl font-black text-white">設定</h2>
+      <h2 className="text-2xl font-black text-slate-950">設定</h2>
       <div className="mt-4 space-y-4">
         <label className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 p-4 font-bold text-white">
           ピークモード
@@ -43,7 +43,7 @@ export default function SettingsPanel() {
               setDefaultTargetSalesText(next);
               void updateSettings({ ...settings, defaultTargetSales: Number(next || 0) });
             }}
-            className="mt-2 w-full rounded-md border border-line bg-panel p-3 text-white"
+            className="mt-2 w-full rounded-md border border-line bg-white p-3 text-slate-950"
           />
         </label>
 
@@ -56,7 +56,7 @@ export default function SettingsPanel() {
               <input
                 value={workspaceIdText}
                 onChange={(event) => setWorkspaceIdText(event.target.value)}
-                className="mt-1 w-full rounded-md border border-line bg-panel p-3 text-white"
+                className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950"
               />
             </label>
             <div className="flex flex-wrap gap-2">
@@ -88,7 +88,7 @@ export default function SettingsPanel() {
 
         <div className="rounded-lg border border-danger bg-danger/10 p-4">
           <h3 className="text-lg font-black text-danger">データ初期化</h3>
-          <p className="mt-1 text-sm text-slate-300">すべての販売、商品、コスト、営業場次を削除し、初期データに戻します。</p>
+          <p className="mt-1 text-sm text-slate-600">すべての販売、商品、コスト、営業場次を削除し、初期データに戻します。</p>
           <input
             value={confirmText}
             onChange={(event) => setConfirmText(event.target.value)}
@@ -112,9 +112,9 @@ export default function SettingsPanel() {
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-line bg-panel p-3">
-      <div className="text-xs text-slate-300">{label}</div>
-      <div className="mt-1 break-all font-black text-white">{value}</div>
+    <div className="rounded-md border border-line bg-white p-3">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="mt-1 break-all font-black text-slate-950">{value}</div>
     </div>
   );
 }

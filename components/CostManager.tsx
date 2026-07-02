@@ -75,6 +75,17 @@ export default function CostManager() {
     () => costs.filter((cost) => !filterCategoryId || cost.costCategoryId === filterCategoryId),
     [costs, filterCategoryId]
   );
+  const categoryTotals = useMemo(() => {
+    const amounts = costCategories
+      .filter((category) => category.enabled)
+      .map((category) => ({
+        id: category.id,
+        name: category.name,
+        amount: costs.filter((cost) => cost.costCategoryId === category.id).reduce((sum, cost) => sum + cost.amount, 0)
+      }));
+    const maxAmount = Math.max(1, ...amounts.map((item) => item.amount));
+    return amounts.map((item) => ({ ...item, ratio: item.amount / maxAmount }));
+  }, [costCategories, costs]);
 
   const submit = async () => {
     if (!editing.name.trim()) return;
@@ -103,13 +114,27 @@ export default function CostManager() {
         <div className="rounded-lg border border-line bg-panel p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black text-white">コスト一覧</h2>
-              <p className="text-sm text-slate-300">{selectedSession?.name ?? "営業場次を選択してください"}</p>
+              <h2 className="text-2xl font-black text-slate-950">コスト一覧</h2>
+              <p className="text-sm text-slate-600">{selectedSession?.name ?? "営業場次を選択してください"}</p>
             </div>
             <div className="text-right">
-              <div className="text-sm text-slate-300">合計</div>
-              <div className="text-2xl font-black text-amber-300">{yen(total)}</div>
+              <div className="text-sm text-slate-600">合計</div>
+              <div className="text-2xl font-black text-amber-600">{yen(total)}</div>
             </div>
+          </div>
+
+          <div className="mt-4 space-y-2 rounded-lg bg-slate-900 p-3">
+            {categoryTotals.map((item) => (
+              <div key={item.id}>
+                <div className="flex items-center justify-between text-sm text-white">
+                  <span>{item.name}</span>
+                  <strong>{yen(item.amount)}</strong>
+                </div>
+                <div className="mt-1 h-2.5 rounded-full bg-slate-700">
+                  <div className="h-2.5 rounded-full bg-amber" style={{ width: `${item.ratio * 100}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -166,12 +191,12 @@ export default function CostManager() {
                 </div>
               </article>
             ))}
-            {filteredCosts.length === 0 && <p className="text-slate-300">表示できるコスト記録がありません。</p>}
+            {filteredCosts.length === 0 && <p className="text-slate-500">表示できるコスト記録がありません。</p>}
           </div>
         </div>
 
         <section className="rounded-lg border border-line bg-panel p-4">
-          <h2 className="text-xl font-black text-white">分類管理</h2>
+          <h2 className="text-xl font-black text-slate-950">分類管理</h2>
           <div className="mt-3 space-y-2">
             {costCategories.map((category) => (
               <div key={category.id} className="rounded-md bg-slate-900 p-3">
@@ -217,10 +242,10 @@ export default function CostManager() {
       </section>
 
       <aside className="rounded-lg border border-line bg-panel p-4">
-        <h2 className="text-xl font-black text-white">コスト入力</h2>
+        <h2 className="text-xl font-black text-slate-950">コスト入力</h2>
         <div className="mt-4 grid gap-3">
           <Field label="名称" value={editing.name} onChange={(value) => setEditing({ ...editing, name: value })} />
-          <label className="text-sm font-bold text-slate-200">
+          <label className="text-sm font-bold text-slate-600">
             金額
             <input
               type="number"
@@ -235,7 +260,7 @@ export default function CostManager() {
             />
           </label>
           <div>
-            <div className="mb-2 text-sm font-bold text-slate-200">分類</div>
+            <div className="mb-2 text-sm font-bold text-slate-600">分類</div>
             <div className="grid grid-cols-2 gap-2">
               {costCategories.filter((category) => category.enabled).map((category) => (
                 <button
@@ -250,7 +275,7 @@ export default function CostManager() {
               ))}
             </div>
           </div>
-          <label className="text-sm font-bold text-slate-200">
+          <label className="text-sm font-bold text-slate-600">
             会計区分
             <select
               value={editing.type}
@@ -265,7 +290,7 @@ export default function CostManager() {
             </select>
           </label>
           <Field label="日付" value={editing.date} onChange={(value) => setEditing({ ...editing, date: value })} />
-          <label className="text-sm font-bold text-slate-200">
+          <label className="text-sm font-bold text-slate-600">
             メモ
             <textarea
               value={editing.note}
@@ -293,7 +318,7 @@ export default function CostManager() {
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="text-sm font-bold text-slate-200">
+    <label className="text-sm font-bold text-slate-600">
       {label}
       <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-md border border-line bg-slate-950 p-3 text-white" />
     </label>

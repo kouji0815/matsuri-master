@@ -16,7 +16,7 @@ export default function SalesHistory() {
               <span className="text-sm text-slate-600">{new Date(sale.createdAt).toLocaleTimeString("ja-JP")}</span>
               <span className="font-black text-mint">{yen(sale.totalRevenue)}</span>
             </div>
-            <div className="mt-1 text-sm text-slate-200">
+            <div className="mt-1 text-sm text-slate-600">
               {sale.bundleName ? `${sale.bundleName}：` : ""}
               {sale.items.map((item) => `${item.productName} x${item.quantity}`).join(" / ")}
             </div>

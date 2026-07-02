@@ -306,12 +306,12 @@ export default function DataManager() {
       <section className="rounded-lg border border-line bg-panel p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-black text-white">データ管理</h2>
-            <p className="text-sm text-slate-300">
+            <h2 className="text-2xl font-black text-slate-950">データ管理</h2>
+            <p className="text-sm text-slate-600">
               本アプリはオフライン優先です。営業中のデータはまずこの端末に保存され、ネット接続時にクラウドへ同期されます。
             </p>
           </div>
-          {message && <div className="rounded-md border border-mint bg-mint/15 px-3 py-2 font-bold text-emerald-200">{message}</div>}
+          {message && <div className="rounded-md border border-mint bg-mint/15 px-3 py-2 font-bold text-emerald-700">{message}</div>}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Metric label="場次数" value={`${snapshot.sessions.length}`} />
@@ -326,8 +326,8 @@ export default function DataManager() {
       <section className="rounded-lg border border-line bg-panel p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-xl font-black text-white">クラウド同期</h3>
-            <p className="text-sm text-slate-300">Supabase はバックアップと複数端末共有用です。営業データの本体はこの端末の IndexedDB に残ります。</p>
+            <h3 className="text-xl font-black text-slate-950">クラウド同期</h3>
+            <p className="text-sm text-slate-600">Supabase はバックアップと複数端末共有用です。営業データの本体はこの端末の IndexedDB に残ります。</p>
           </div>
           <button onClick={() => setMode("settings")} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white">
             クラウド同期設定
@@ -361,7 +361,7 @@ export default function DataManager() {
 
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <section className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="text-xl font-black text-white">営業記録一覧</h3>
+          <h3 className="text-xl font-black text-slate-950">営業記録一覧</h3>
           <div className="mt-4 max-h-[620px] space-y-3 overflow-auto">
             {sessionSummaries.map(({ session, summary }) => (
               <button
@@ -371,13 +371,13 @@ export default function DataManager() {
                   setFilters((current) => ({ ...current, sessionId: session.id }));
                 }}
                 className={`w-full rounded-lg border p-4 text-left ${
-                  selectedSessionId === session.id ? "border-mint bg-mint/15" : "border-line bg-slate-900"
+                  selectedSessionId === session.id ? "border-mint bg-mint/15 text-slate-950" : "border-line bg-slate-900 text-white"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-lg font-black text-white">{session.name}</div>
-                    <div className="text-sm text-slate-300">{session.date}</div>
+                    <div className="text-lg font-black">{session.name}</div>
+                    <div className={`text-sm ${selectedSessionId === session.id ? "text-slate-600" : "text-slate-300"}`}>{session.date}</div>
                   </div>
                   <span className="rounded-md bg-slate-700 px-2 py-1 text-xs font-black text-white">{sessionStatusLabel[session.status]}</span>
                 </div>
@@ -394,8 +394,8 @@ export default function DataManager() {
         <section className="rounded-lg border border-line bg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-xl font-black text-white">販売記録</h3>
-              <p className="text-sm text-slate-300">{selectedSession ? `選択中: ${selectedSession.name}` : "場次を選択してください"}</p>
+              <h3 className="text-xl font-black text-slate-950">販売記録</h3>
+              <p className="text-sm text-slate-600">{selectedSession ? `選択中: ${selectedSession.name}` : "場次を選択してください"}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={exportFullBackup} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white">
@@ -414,7 +414,7 @@ export default function DataManager() {
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-4">
-            <label className="text-sm font-bold text-slate-200">
+            <label className="text-sm font-bold text-slate-600">
               場次
               <select value={filters.sessionId} onChange={(event) => setFilters({ ...filters, sessionId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white">
                 <option value="">すべて</option>
@@ -425,11 +425,11 @@ export default function DataManager() {
                 ))}
               </select>
             </label>
-            <label className="text-sm font-bold text-slate-200">
+            <label className="text-sm font-bold text-slate-600">
               日付
               <input value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} type="date" className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white" />
             </label>
-            <label className="text-sm font-bold text-slate-200">
+            <label className="text-sm font-bold text-slate-600">
               商品
               <select value={filters.productId} onChange={(event) => setFilters({ ...filters, productId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white">
                 <option value="">すべて</option>
@@ -440,7 +440,7 @@ export default function DataManager() {
                 ))}
               </select>
             </label>
-            <label className="text-sm font-bold text-slate-200">
+            <label className="text-sm font-bold text-slate-600">
               分類
               <select value={filters.categoryId} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white">
                 <option value="">すべて</option>
@@ -482,13 +482,13 @@ export default function DataManager() {
                 </div>
               </article>
             ))}
-            {filteredSales.length === 0 && <p className="text-slate-300">条件に一致する販売記録はありません。</p>}
+            {filteredSales.length === 0 && <p className="text-slate-500">条件に一致する販売記録はありません。</p>}
           </div>
         </section>
       </div>
 
       <section className="rounded-lg border border-line bg-panel p-4">
-        <h3 className="text-xl font-black text-white">バックアップ / 復元</h3>
+        <h3 className="text-xl font-black text-slate-950">バックアップ / 復元</h3>
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => fileInputRef.current?.click()} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white">
             完全バックアップ JSON を読み込む
@@ -497,7 +497,7 @@ export default function DataManager() {
         </div>
         <div className="mt-4 rounded-lg border border-danger bg-danger/10 p-4">
           <h4 className="font-black text-danger">ローカルデータ削除</h4>
-          <p className="mt-1 text-sm text-slate-300">
+          <p className="mt-1 text-sm text-slate-600">
             本 App のデータは現在の iPad のブラウザに保存されます。端末変更やブラウザデータ削除の前に、必ずバックアップ JSON を出力してください。
           </p>
           <input
