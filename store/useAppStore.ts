@@ -49,6 +49,8 @@ type AppState = {
   disconnectCloudSync: () => Promise<void>;
   saveProduct: (product: Product) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
+  reorderProducts: (categoryId: string, orderedProductIds: string[]) => Promise<void>;
+  bulkMoveProductsCategory: (productIds: string[], categoryId: string) => Promise<void>;
   saveCategory: (category: ProductCategory) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   moveCategory: (categoryId: string, direction: "up" | "down") => Promise<void>;
@@ -291,7 +293,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { sales, costs } = await readSessionData(selectedSession?.id);
 
     set({
-      products: products.filter((item) => !item.deletedAt).sort((a, b) => a.name.localeCompare(b.name, "ja")),
+      products: products
+        .filter((item) => !item.deletedAt)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, "ja")),
       categories: categories
         .filter((item) => !item.deletedAt)
         .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ja")),
@@ -390,6 +394,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteProduct: async (productId) => {
     await softDelete(db.products, productId);
+    await get().refresh();
+    await get().refreshSyncOverview();
+  },
+
+  reorderProducts: async (categoryId, orderedProductIds) => {
+    await db.transaction("rw", db.products, async () => {
+      await Promise.all(
+        orderedProductIds.map((productId, index) =>
+          db.products.update(productId, { sortOrder: (index + 1) * 10, updatedAt: now(), syncStatus: "pending" })
+        )
+      );
+    });
+    await get().refresh();
+    await get().refreshSyncOverview();
+  },
+
+  bulkMoveProductsCategory: async (productIds, categoryId) => {
+    await db.transaction("rw", db.products, async () => {
+      await Promise.all(
+        productIds.map((productId) => db.products.update(productId, { category: categoryId, updatedAt: now(), syncStatus: "pending" }))
+      );
+    });
     await get().refresh();
     await get().refreshSyncOverview();
   },

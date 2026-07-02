@@ -122,6 +122,36 @@ class MatsuriDb extends Dexie {
           if (record.cloudSyncEnabled === undefined) record.cloudSyncEnabled = true;
         });
       });
+    this.version(4)
+      .stores({
+        categories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+        costCategories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+        products: "id, workspaceId, category, enabled, syncStatus, deletedAt, sortOrder",
+        bundles: "id, workspaceId, enabled, syncStatus, deletedAt",
+        sessions: "id, workspaceId, date, status, syncStatus, deletedAt",
+        sales: "id, workspaceId, sessionId, createdAt, syncStatus, deletedAt",
+        costs: "id, workspaceId, sessionId, date, type, costCategoryId, syncStatus, deletedAt",
+        stockAdjustments: "id, workspaceId, productId, createdAt, syncStatus, deletedAt",
+        settings: "id, workspaceId, syncStatus, updatedAt"
+      })
+      .upgrade(async (tx) => {
+        const products = await tx.table("products").toArray();
+        const byCategory = new Map<string, typeof products>();
+        for (const product of products) {
+          if (typeof product.sortOrder === "number") continue;
+          const list = byCategory.get(product.category) ?? [];
+          list.push(product);
+          byCategory.set(product.category, list);
+        }
+        for (const list of byCategory.values()) {
+          list.sort((a, b) => String(a.name).localeCompare(String(b.name), "ja"));
+          await Promise.all(
+            list.map((product, index) =>
+              tx.table("products").update(product.id, { sortOrder: (index + 1) * 10, updatedAt: now(), syncStatus: "pending" })
+            )
+          );
+        }
+      });
   }
 }
 
@@ -159,6 +189,24 @@ export async function ensureSeedData() {
   const latestProducts = await db.products.toArray();
   if (!latestProducts.some((product) => product.id === "prod-glow-ring")) {
     await db.products.bulkPut(seedProducts.filter((product) => product.category === "cat-toy"));
+  }
+
+  const productsMissingSortOrder = (await db.products.toArray()).filter((product) => typeof product.sortOrder !== "number");
+  if (productsMissingSortOrder.length > 0) {
+    const byCategory = new Map<string, typeof productsMissingSortOrder>();
+    for (const product of productsMissingSortOrder) {
+      const list = byCategory.get(product.category) ?? [];
+      list.push(product);
+      byCategory.set(product.category, list);
+    }
+    for (const list of byCategory.values()) {
+      list.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+      await Promise.all(
+        list.map((product, index) =>
+          db.products.update(product.id, { sortOrder: (index + 1) * 10, updatedAt: now(), syncStatus: "pending" })
+        )
+      );
+    }
   }
 
   const bundleCount = await db.bundles.count();

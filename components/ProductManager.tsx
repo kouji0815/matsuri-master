@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BundleRule, Product, ProductCategory } from "@/types";
 import { yen } from "@/lib/calculations";
 import { useAppStore } from "@/store/useAppStore";
@@ -15,7 +15,7 @@ const baseSync = () => ({
   deletedAt: null as string | null
 });
 
-const blankProduct = (category = "cat-skewer"): Product => ({
+const blankProduct = (category: string, sortOrder: number): Product => ({
   id: `prod-${crypto.randomUUID()}`,
   name: "",
   icon: "🍢",
@@ -26,6 +26,7 @@ const blankProduct = (category = "cat-skewer"): Product => ({
   currentStock: 0,
   warningStock: 5,
   enabled: true,
+  sortOrder,
   createdAt: now(),
   ...baseSync()
 });
@@ -54,6 +55,13 @@ const blankBundle = (): BundleRule => ({
   ...baseSync()
 });
 
+function moveItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...list];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 export default function ProductManager() {
   const {
     products,
@@ -61,32 +69,53 @@ export default function ProductManager() {
     bundles,
     saveProduct,
     deleteProduct,
+    reorderProducts,
+    bulkMoveProductsCategory,
     saveCategory,
     deleteCategory,
     moveCategory,
     saveBundle,
     deleteBundle
   } = useAppStore();
-  const firstCategoryId = categories[0]?.id ?? "cat-skewer";
-  const [editingProduct, setEditingProduct] = useState<Product>(blankProduct(firstCategoryId));
-  const [editingCategory, setEditingCategory] = useState<ProductCategory>(blankCategory(100));
+
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [productModal, setProductModal] = useState<Product | undefined>(undefined);
+  const [categoryModal, setCategoryModal] = useState<ProductCategory | undefined>(undefined);
   const [editingBundle, setEditingBundle] = useState<BundleRule>(blankBundle());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [bulkTargetCategoryId, setBulkTargetCategoryId] = useState("");
+  const [draggedId, setDraggedId] = useState("");
+
+  useEffect(() => {
+    if (!selectedCategoryId && categories.length > 0) setSelectedCategoryId(categories[0].id);
+  }, [categories, selectedCategoryId]);
 
   const categoryName = (id: string) => categories.find((category) => category.id === id)?.name ?? "未分類";
+  const productCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const product of products) counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
+    return counts;
+  }, [products]);
 
-  const submitProduct = async () => {
-    if (!editingProduct.name.trim()) return;
-    await saveProduct({ ...editingProduct, category: editingProduct.category || firstCategoryId });
-    setEditingProduct(blankProduct(firstCategoryId));
+  const categoryProducts = useMemo(
+    () => products.filter((product) => product.category === selectedCategoryId),
+    [products, selectedCategoryId]
+  );
+
+  const submitProduct = async (product: Product) => {
+    if (!product.name.trim()) return;
+    await saveProduct(product);
+    setProductModal(undefined);
   };
 
-  const submitCategory = async () => {
-    if (!editingCategory.name.trim()) return;
+  const submitCategory = async (category: ProductCategory) => {
+    if (!category.name.trim()) return;
     await saveCategory({
-      ...editingCategory,
-      sortOrder: editingCategory.sortOrder || Math.max(0, ...categories.map((category) => category.sortOrder)) + 10
+      ...category,
+      sortOrder: category.sortOrder || Math.max(0, ...categories.map((item) => item.sortOrder)) + 10
     });
-    setEditingCategory(blankCategory(Math.max(0, ...categories.map((category) => category.sortOrder)) + 20));
+    setCategoryModal(undefined);
   };
 
   const submitBundle = async () => {
@@ -108,140 +137,229 @@ export default function ProductManager() {
     });
   };
 
-  return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_430px]">
-      <section className="rounded-lg border border-line bg-panel p-4">
-        <h2 className="text-2xl font-black">商品・在庫</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => (
-            <article key={product.id} className="rounded-lg border border-line bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-3xl">{product.icon}</div>
-                  <h3 className="mt-2 text-xl font-black">{product.name}</h3>
-                  <p className="text-sm text-slate-600">{categoryName(product.category)}</p>
-                </div>
-                <span className={`rounded-md px-2 py-1 text-xs font-black ${product.enabled ? "bg-mint text-slate-950" : "bg-slate-700 text-white"}`}>
-                  {product.enabled ? "販売中" : "停止"}
-                </span>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                <Info label="価格" value={yen(product.price)} />
-                <Info label="原価" value={yen(product.unitCost)} />
-                <Info label="初期在庫" value={`${product.initialStock}`} />
-                <Info label="現在在庫" value={`${product.currentStock}`} />
-              </div>
-              <div className="mt-4 flex gap-2">
-                <button onClick={() => setEditingProduct(product)} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
-                  編集
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm("この商品を削除しますか？")) void deleteProduct(product.id);
-                  }}
-                  className="rounded-md bg-danger px-4 py-3 font-bold text-white"
-                >
-                  削除
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+  const handleDeleteCategory = async (category: ProductCategory) => {
+    const count = productCountByCategory.get(category.id) ?? 0;
+    const message =
+      count > 0
+        ? `このカテゴリを削除しますか？紐づく商品 ${count} 点は「その他」へ移動します。`
+        : "このカテゴリを削除しますか？";
+    if (confirm(message)) {
+      await deleteCategory(category.id);
+      if (selectedCategoryId === category.id) setSelectedCategoryId("");
+    }
+  };
 
-      <aside className="space-y-4">
-        <section className="rounded-lg border border-line bg-panel p-4">
-          <h2 className="text-xl font-black">商品編集</h2>
-          <div className="mt-4 grid gap-3">
-            <Field label="商品名" value={editingProduct.name} onChange={(value) => setEditingProduct({ ...editingProduct, name: value })} />
-            <Field label="Emoji / アイコン" value={editingProduct.icon} onChange={(value) => setEditingProduct({ ...editingProduct, icon: value })} />
-            <label className="text-sm font-bold text-slate-600">
-              カテゴリ
-              <select value={editingProduct.category} onChange={(event) => setEditingProduct({ ...editingProduct, category: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3">
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <NumberField label="販売価格" value={editingProduct.price} onChange={(value) => setEditingProduct({ ...editingProduct, price: value })} />
-            <NumberField label="単品原価" value={editingProduct.unitCost} onChange={(value) => setEditingProduct({ ...editingProduct, unitCost: value })} />
-            <NumberField label="初期在庫" value={editingProduct.initialStock} onChange={(value) => setEditingProduct({ ...editingProduct, initialStock: value })} />
-            <NumberField label="現在在庫" value={editingProduct.currentStock} onChange={(value) => setEditingProduct({ ...editingProduct, currentStock: value })} />
-            <NumberField label="警告在庫" value={editingProduct.warningStock} onChange={(value) => setEditingProduct({ ...editingProduct, warningStock: value })} />
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-              <input type="checkbox" checked={editingProduct.enabled} onChange={(event) => setEditingProduct({ ...editingProduct, enabled: event.target.checked })} />
-              有効にする
-            </label>
-            <button onClick={submitProduct} className="min-h-14 rounded-lg bg-mint font-black text-slate-950">
-              商品を保存
-            </button>
-            <button onClick={() => setEditingProduct(blankProduct(firstCategoryId))} className="rounded-md bg-slate-700 py-3 font-bold text-white">
-              新規入力
+  const toggleSelectionMode = () => {
+    setSelectionMode((current) => !current);
+    setSelectedProductIds([]);
+  };
+
+  const toggleProductSelected = (productId: string) => {
+    setSelectedProductIds((current) =>
+      current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
+    );
+  };
+
+  const confirmBulkMove = async () => {
+    if (!bulkTargetCategoryId || selectedProductIds.length === 0) return;
+    await bulkMoveProductsCategory(selectedProductIds, bulkTargetCategoryId);
+    setSelectedProductIds([]);
+    setSelectionMode(false);
+    setBulkTargetCategoryId("");
+  };
+
+  const persistOrder = async (orderedProducts: Product[]) => {
+    await reorderProducts(selectedCategoryId, orderedProducts.map((product) => product.id));
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!draggedId || draggedId === targetId) return;
+    const fromIndex = categoryProducts.findIndex((product) => product.id === draggedId);
+    const toIndex = categoryProducts.findIndex((product) => product.id === targetId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    void persistOrder(moveItem(categoryProducts, fromIndex, toIndex));
+    setDraggedId("");
+  };
+
+  const moveProductStep = (productId: string, direction: "up" | "down") => {
+    const index = categoryProducts.findIndex((product) => product.id === productId);
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || swapIndex < 0 || swapIndex >= categoryProducts.length) return;
+    void persistOrder(moveItem(categoryProducts, index, swapIndex));
+  };
+
+  const selectedCategory = categories.find((category) => category.id === selectedCategoryId);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[260px_1fr]">
+        <aside className="rounded-lg border border-line bg-panel p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xl font-black">カテゴリ</h2>
+            <button
+              onClick={() => setCategoryModal(blankCategory(Math.max(0, ...categories.map((category) => category.sortOrder)) + 10))}
+              className="rounded-md bg-mint px-3 py-2 font-black text-slate-950"
+            >
+              ＋ 新規
             </button>
           </div>
-        </section>
-
-        <section className="rounded-lg border border-line bg-panel p-4">
-          <h2 className="text-xl font-black">カテゴリ管理</h2>
           <div className="mt-3 space-y-2">
             {categories.map((category) => (
-              <div key={category.id} className="rounded-md bg-white p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
+              <div
+                key={category.id}
+                className={`rounded-lg border p-3 ${
+                  selectedCategoryId === category.id ? "border-mint bg-mint/15" : "border-line bg-white"
+                }`}
+              >
+                <button onClick={() => setSelectedCategoryId(category.id)} className="w-full text-left">
+                  <div className="flex items-center justify-between gap-2">
                     <strong>{category.name}</strong>
-                    <div className="text-sm text-slate-600">
-                      {category.enabled ? "表示中" : "停止"} / ピーク時 {category.showInHighTraffic ? "表示" : "非表示"}
-                    </div>
+                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                      {productCountByCategory.get(category.id) ?? 0}品
+                    </span>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => void moveCategory(category.id, "up")} className="rounded-md bg-slate-100 px-3 py-2 font-black">
-                      ↑
-                    </button>
-                    <button onClick={() => void moveCategory(category.id, "down")} className="rounded-md bg-slate-100 px-3 py-2 font-black">
-                      ↓
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <button onClick={() => setEditingCategory(category)} className="flex-1 rounded-md bg-slate-700 py-2 font-bold text-white">
+                  <div className="text-xs text-slate-500">{category.enabled ? "表示中" : "停止"}</div>
+                </button>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button onClick={() => void moveCategory(category.id, "up")} className="rounded-md bg-slate-100 px-2 py-1 text-sm font-black">
+                    ↑
+                  </button>
+                  <button onClick={() => void moveCategory(category.id, "down")} className="rounded-md bg-slate-100 px-2 py-1 text-sm font-black">
+                    ↓
+                  </button>
+                  <button onClick={() => setCategoryModal(category)} className="flex-1 rounded-md bg-slate-700 px-2 py-1 text-sm font-bold text-white">
                     編集
                   </button>
-                  <button
-                    onClick={() => {
-                      if (confirm("このカテゴリを削除しますか？商品はその他カテゴリへ移動します。")) void deleteCategory(category.id);
-                    }}
-                    className="rounded-md bg-danger px-3 py-2 font-bold text-white"
-                  >
+                  <button onClick={() => void handleDeleteCategory(category)} className="rounded-md bg-danger px-2 py-1 text-sm font-bold text-white">
                     削除
                   </button>
                 </div>
               </div>
             ))}
+            {categories.length === 0 && <p className="text-sm text-slate-500">カテゴリがありません。</p>}
           </div>
-          <div className="mt-4 grid gap-3">
-            <Field label="カテゴリ名" value={editingCategory.name} onChange={(value) => setEditingCategory({ ...editingCategory, name: value })} />
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-              <input type="checkbox" checked={editingCategory.enabled} onChange={(event) => setEditingCategory({ ...editingCategory, enabled: event.target.checked })} />
-              表示する
-            </label>
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-              <input type="checkbox" checked={editingCategory.showInHighTraffic} onChange={(event) => setEditingCategory({ ...editingCategory, showInHighTraffic: event.target.checked })} />
-              ピークモードで表示
-            </label>
-            <button onClick={submitCategory} className="min-h-14 rounded-lg bg-mint font-black text-slate-950">
-              カテゴリを保存
-            </button>
-            <button onClick={() => setEditingCategory(blankCategory(Math.max(0, ...categories.map((category) => category.sortOrder)) + 10))} className="rounded-md bg-slate-700 py-3 font-bold text-white">
-              新規入力
-            </button>
-          </div>
-        </section>
+        </aside>
 
         <section className="rounded-lg border border-line bg-panel p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-black">{selectedCategory ? `${selectedCategory.name} の商品` : "カテゴリを選択してください"}</h2>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={toggleSelectionMode}
+                className={`rounded-md px-4 py-2 font-bold ${selectionMode ? "bg-amber text-slate-950" : "bg-slate-700 text-white"}`}
+              >
+                {selectionMode ? "選択モード終了" : "選択モード"}
+              </button>
+              <button
+                onClick={() =>
+                  setProductModal(blankProduct(selectedCategoryId, Math.max(0, ...categoryProducts.map((product) => product.sortOrder)) + 10))
+                }
+                disabled={!selectedCategoryId}
+                className="rounded-md bg-mint px-4 py-2 font-black text-slate-950 disabled:bg-slate-300 disabled:text-slate-600"
+              >
+                ＋ 商品を追加
+              </button>
+            </div>
+          </div>
+
+          {selectionMode && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-amber/15 p-3">
+              <span className="font-bold text-slate-700">{selectedProductIds.length}件選択中</span>
+              <select
+                value={bulkTargetCategoryId}
+                onChange={(event) => setBulkTargetCategoryId(event.target.value)}
+                className="rounded-md border border-line bg-white p-2 text-slate-950"
+              >
+                <option value="">移動先カテゴリを選択</option>
+                {categories
+                  .filter((category) => category.id !== selectedCategoryId)
+                  .map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+              </select>
+              <button
+                onClick={confirmBulkMove}
+                disabled={selectedProductIds.length === 0 || !bulkTargetCategoryId}
+                className="rounded-md bg-mint px-4 py-2 font-black text-slate-950 disabled:bg-slate-300 disabled:text-slate-600"
+              >
+                選択した商品を移動
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {categoryProducts.map((product) => (
+              <article
+                key={product.id}
+                draggable={!selectionMode}
+                onDragStart={() => setDraggedId(product.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => handleDrop(product.id)}
+                className={`rounded-lg border border-line bg-white p-4 ${draggedId === product.id ? "opacity-50" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    {selectionMode && (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-5 w-5"
+                        checked={selectedProductIds.includes(product.id)}
+                        onChange={() => toggleProductSelected(product.id)}
+                      />
+                    )}
+                    <div>
+                      <div className="text-3xl">{product.icon}</div>
+                      <h3 className="mt-2 text-xl font-black">{product.name}</h3>
+                    </div>
+                  </div>
+                  <span className={`rounded-md px-2 py-1 text-xs font-black ${product.enabled ? "bg-mint text-slate-950" : "bg-slate-700 text-white"}`}>
+                    {product.enabled ? "販売中" : "停止"}
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  <Info label="価格" value={yen(product.price)} />
+                  <Info label="原価" value={yen(product.unitCost)} />
+                  <Info label="初期在庫" value={`${product.initialStock}`} />
+                  <Info label="現在在庫" value={`${product.currentStock}`} />
+                </div>
+                {!selectionMode && (
+                  <div className="mt-4 flex gap-2">
+                    <button onClick={() => moveProductStep(product.id, "up")} className="rounded-md bg-slate-100 px-3 py-3 font-black">
+                      ↑
+                    </button>
+                    <button onClick={() => moveProductStep(product.id, "down")} className="rounded-md bg-slate-100 px-3 py-3 font-black">
+                      ↓
+                    </button>
+                    <button onClick={() => setProductModal(product)} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
+                      編集
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm("この商品を削除しますか？")) void deleteProduct(product.id);
+                      }}
+                      className="rounded-md bg-danger px-4 py-3 font-bold text-white"
+                    >
+                      削除
+                    </button>
+                  </div>
+                )}
+              </article>
+            ))}
+            {selectedCategoryId && categoryProducts.length === 0 && (
+              <p className="text-slate-500">このカテゴリに商品がありません。「＋ 商品を追加」から作成してください。</p>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-lg border border-line bg-panel p-4">
+        <div className="flex items-center justify-between">
           <h2 className="text-xl font-black">セット管理</h2>
-          <div className="mt-3 space-y-2">
+        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_420px]">
+          <div className="space-y-2">
             {bundles.map((bundle) => (
               <div key={bundle.id} className="rounded-md bg-white p-3">
                 <div className="flex items-center justify-between">
@@ -267,7 +385,7 @@ export default function ProductManager() {
               </div>
             ))}
           </div>
-          <div className="mt-4 grid gap-3">
+          <div className="grid gap-3">
             <Field label="セット名" value={editingBundle.name} onChange={(value) => setEditingBundle({ ...editingBundle, name: value })} />
             <NumberField label="セット価格" value={editingBundle.price} onChange={(value) => setEditingBundle({ ...editingBundle, price: value })} />
             <NumberField label="対象商品の点数" value={editingBundle.itemCount} onChange={(value) => setEditingBundle({ ...editingBundle, itemCount: value })} />
@@ -303,8 +421,115 @@ export default function ProductManager() {
               新規入力
             </button>
           </div>
-        </section>
-      </aside>
+        </div>
+      </section>
+
+      {productModal !== undefined && (
+        <ProductEditModal
+          product={productModal}
+          categories={categories}
+          onCancel={() => setProductModal(undefined)}
+          onSave={submitProduct}
+        />
+      )}
+
+      {categoryModal !== undefined && (
+        <CategoryEditModal category={categoryModal} onCancel={() => setCategoryModal(undefined)} onSave={submitCategory} />
+      )}
+    </div>
+  );
+}
+
+function ProductEditModal({
+  product,
+  categories,
+  onCancel,
+  onSave
+}: {
+  product: Product;
+  categories: ProductCategory[];
+  onCancel: () => void;
+  onSave: (product: Product) => void;
+}) {
+  const [draft, setDraft] = useState<Product>(product);
+  const isNew = !product.name;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+      <div className="w-full max-w-xl rounded-lg border border-line bg-white p-5 shadow-soft">
+        <h2 className="text-xl font-black">{isNew ? "商品を追加" : "商品編集"}</h2>
+        <div className="mt-4 grid gap-3">
+          <Field label="商品名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+          <Field label="Emoji / アイコン" value={draft.icon} onChange={(value) => setDraft({ ...draft, icon: value })} />
+          <label className="text-sm font-bold text-slate-600">
+            カテゴリ
+            <select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3">
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <NumberField label="販売価格" value={draft.price} onChange={(value) => setDraft({ ...draft, price: value })} />
+          <NumberField label="単品原価" value={draft.unitCost} onChange={(value) => setDraft({ ...draft, unitCost: value })} />
+          <NumberField label="初期在庫" value={draft.initialStock} onChange={(value) => setDraft({ ...draft, initialStock: value })} />
+          <NumberField label="現在在庫" value={draft.currentStock} onChange={(value) => setDraft({ ...draft, currentStock: value })} />
+          <NumberField label="警告在庫" value={draft.warningStock} onChange={(value) => setDraft({ ...draft, warningStock: value })} />
+          <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            有効にする
+          </label>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <button onClick={onCancel} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
+            キャンセル
+          </button>
+          <button onClick={() => onSave(draft)} className="flex-1 rounded-lg bg-mint font-black text-slate-950">
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryEditModal({
+  category,
+  onCancel,
+  onSave
+}: {
+  category: ProductCategory;
+  onCancel: () => void;
+  onSave: (category: ProductCategory) => void;
+}) {
+  const [draft, setDraft] = useState<ProductCategory>(category);
+  const isNew = !category.name;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+      <div className="w-full max-w-md rounded-lg border border-line bg-white p-5 shadow-soft">
+        <h2 className="text-xl font-black">{isNew ? "新しいカテゴリ" : "カテゴリ編集"}</h2>
+        <div className="mt-4 grid gap-3">
+          <Field label="カテゴリ名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+          <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            表示する
+          </label>
+          <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+            <input type="checkbox" checked={draft.showInHighTraffic} onChange={(event) => setDraft({ ...draft, showInHighTraffic: event.target.checked })} />
+            ピークモードで表示
+          </label>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <button onClick={onCancel} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
+            キャンセル
+          </button>
+          <button onClick={() => onSave(draft)} className="flex-1 rounded-lg bg-mint font-black text-slate-950">
+            保存
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

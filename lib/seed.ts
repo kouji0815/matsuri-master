@@ -43,6 +43,7 @@ export const seedProducts: Product[] = [
     currentStock: 80,
     warningStock: 10,
     enabled: true,
+    sortOrder: 10,
     createdAt: now(),
     ...syncFields()
   },
@@ -57,6 +58,7 @@ export const seedProducts: Product[] = [
     currentStock: 80,
     warningStock: 10,
     enabled: true,
+    sortOrder: 20,
     createdAt: now(),
     ...syncFields()
   },
@@ -71,6 +73,7 @@ export const seedProducts: Product[] = [
     currentStock: 25,
     warningStock: 6,
     enabled: true,
+    sortOrder: 30,
     createdAt: now(),
     ...syncFields()
   },
@@ -85,6 +88,7 @@ export const seedProducts: Product[] = [
     currentStock: 25,
     warningStock: 6,
     enabled: true,
+    sortOrder: 40,
     createdAt: now(),
     ...syncFields()
   },
@@ -99,6 +103,7 @@ export const seedProducts: Product[] = [
     currentStock: 50,
     warningStock: 8,
     enabled: true,
+    sortOrder: 50,
     createdAt: now(),
     ...syncFields()
   },
@@ -113,6 +118,7 @@ export const seedProducts: Product[] = [
     currentStock: 60,
     warningStock: 10,
     enabled: true,
+    sortOrder: 10,
     createdAt: now(),
     ...syncFields()
   },
@@ -127,6 +133,7 @@ export const seedProducts: Product[] = [
     currentStock: 60,
     warningStock: 10,
     enabled: true,
+    sortOrder: 20,
     createdAt: now(),
     ...syncFields()
   },
@@ -141,6 +148,7 @@ export const seedProducts: Product[] = [
     currentStock: 50,
     warningStock: 10,
     enabled: true,
+    sortOrder: 10,
     createdAt: now(),
     ...syncFields()
   },
@@ -155,6 +163,7 @@ export const seedProducts: Product[] = [
     currentStock: 30,
     warningStock: 8,
     enabled: true,
+    sortOrder: 20,
     createdAt: now(),
     ...syncFields()
   },
@@ -169,6 +178,7 @@ export const seedProducts: Product[] = [
     currentStock: 40,
     warningStock: 8,
     enabled: true,
+    sortOrder: 30,
     createdAt: now(),
     ...syncFields()
   }

@@ -13,6 +13,17 @@ const typeLabels: Record<CostType, string> = {
   other: "その他"
 };
 
+const chartColors = [
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-sky-500",
+  "bg-violet-500",
+  "bg-rose-500",
+  "bg-lime-500",
+  "bg-cyan-500",
+  "bg-fuchsia-500"
+];
+
 const now = () => new Date().toISOString();
 
 const blankCost = (sessionId?: string): CostRecord => ({
@@ -123,15 +134,15 @@ export default function CostManager() {
             </div>
           </div>
 
-          <div className="mt-4 space-y-2 rounded-lg bg-slate-900 p-3">
-            {categoryTotals.map((item) => (
+          <div className="mt-4 space-y-2 rounded-lg border border-line bg-white p-3">
+            {categoryTotals.map((item, index) => (
               <div key={item.id}>
-                <div className="flex items-center justify-between text-sm text-white">
+                <div className="flex items-center justify-between text-sm text-gray-900">
                   <span>{item.name}</span>
                   <strong>{yen(item.amount)}</strong>
                 </div>
-                <div className="mt-1 h-2.5 rounded-full bg-slate-700">
-                  <div className="h-2.5 rounded-full bg-amber" style={{ width: `${item.ratio * 100}%` }} />
+                <div className="mt-1 h-2.5 rounded-full bg-slate-200">
+                  <div className={`h-2.5 rounded-full ${chartColors[index % chartColors.length]}`} style={{ width: `${item.ratio * 100}%` }} />
                 </div>
               </div>
             ))}
