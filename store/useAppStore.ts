@@ -65,6 +65,7 @@ type AppState = {
   clearCart: () => void;
   checkoutCart: (input: CheckoutInput) => Promise<{ ok: boolean; message?: string }>;
   undoLastSale: () => Promise<void>;
+  deleteSale: (saleId: string) => Promise<void>;
   adjustStock: (productId: string, delta: number, reason: StockReason, note: string) => Promise<void>;
   saveCost: (cost: CostRecord) => Promise<void>;
   deleteCost: (costId: string) => Promise<void>;
@@ -703,6 +704,27 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       await softDelete(db.sales, latest.id);
+    });
+    await get().refresh();
+    await get().refreshSyncOverview();
+  },
+
+  deleteSale: async (saleId) => {
+    const sale = await db.sales.get(saleId);
+    if (!sale || sale.deletedAt) return;
+    const products = await db.products.toArray();
+    await db.transaction("rw", db.products, db.sales, async () => {
+      for (const item of sale.items) {
+        const product = products.find((entry) => entry.id === item.productId);
+        if (product) {
+          await db.products.update(product.id, {
+            currentStock: product.currentStock + item.quantity,
+            updatedAt: now(),
+            syncStatus: "pending"
+          });
+        }
+      }
+      await softDelete(db.sales, sale.id);
     });
     await get().refresh();
     await get().refreshSyncOverview();
