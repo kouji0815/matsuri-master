@@ -110,6 +110,12 @@ export default function DataManager() {
   const [filters, setFilters] = useState({ sessionId: "", date: "", productId: "", categoryId: "" });
   const [deleteText, setDeleteText] = useState("");
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
+
+  const showMessage = (text: string, isError = false) => {
+    setMessage(text);
+    setMessageIsError(isError);
+  };
 
   const loadSnapshot = async () => {
     const [categories, costCategories, products, bundles, sessions, sales, costs, stockAdjustments, settingsRows] = await Promise.all([
@@ -196,7 +202,7 @@ export default function DataManager() {
   const exportFullBackup = async () => {
     const backup = await buildBackup();
     downloadTextFile(`matsuri-master-backup-${today()}.json`, JSON.stringify(backup, null, 2), "application/json;charset=utf-8");
-    setMessage("完全バックアップ JSON を出力しました。");
+    showMessage("完全バックアップ JSON を出力しました。");
   };
 
   const exportCurrentSessionJson = () => {
@@ -213,18 +219,18 @@ export default function DataManager() {
       JSON.stringify(payload, null, 2),
       "application/json;charset=utf-8"
     );
-    setMessage("現在の場次 JSON を出力しました。");
+    showMessage("現在の場次 JSON を出力しました。");
   };
 
   const exportAllSalesCsv = () => {
     downloadTextFile(`matsuri-sales-all-${today()}.csv`, salesCsv(snapshot.sales, snapshot.sessions));
-    setMessage("全販売 CSV を出力しました。");
+    showMessage("全販売 CSV を出力しました。");
   };
 
   const exportCurrentSessionCsv = () => {
     if (!selectedSession) return;
     downloadTextFile(`matsuri-sales-${safeFileName(selectedSession.name)}-${today()}.csv`, salesCsv(selectedSessionSales, snapshot.sessions));
-    setMessage("現在の場次 CSV を出力しました。");
+    showMessage("現在の場次 CSV を出力しました。");
   };
 
   const importBackup = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -236,7 +242,7 @@ export default function DataManager() {
     try {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isBackupPayload(parsed)) {
-        setMessage("JSON 形式が正しくありません。");
+        showMessage("JSON 形式が正しくありません。", true);
         return;
       }
       const normalizedCostCategories = "costCategories" in parsed && Array.isArray(parsed.costCategories) ? parsed.costCategories : [];
@@ -269,10 +275,25 @@ export default function DataManager() {
       await refresh();
       await loadSnapshot();
       await refreshSyncOverview();
-      setMessage("バックアップを読み込みました。");
+      showMessage("バックアップを読み込みました。");
     } catch {
-      setMessage("読み込みに失敗しました。Matsuri Master の JSON バックアップを確認してください。");
+      showMessage("読み込みに失敗しました。Matsuri Master の JSON バックアップを確認してください。", true);
     }
+  };
+
+  const handleSyncAll = async () => {
+    const result = await runSyncAll();
+    showMessage(result.message ?? (result.ok ? "同期が完了しました。" : "同期に失敗しました。"), !result.ok);
+  };
+
+  const handlePullSync = async () => {
+    const result = await runPullSync();
+    showMessage(result.message ?? (result.ok ? "クラウドから取得しました。" : "取得に失敗しました。"), !result.ok);
+  };
+
+  const handlePushSync = async () => {
+    const result = await runPushSync();
+    showMessage(result.message ?? (result.ok ? "ローカルをアップロードしました。" : "アップロードに失敗しました。"), !result.ok);
   };
 
   const clearAllData = async () => {
@@ -298,7 +319,7 @@ export default function DataManager() {
     await loadSnapshot();
     await refreshSyncOverview();
     setDeleteText("");
-    setMessage("ローカルデータを初期化しました。");
+    showMessage("ローカルデータを初期化しました。");
   };
 
   return (
@@ -311,7 +332,15 @@ export default function DataManager() {
               本アプリはオフライン優先です。営業中のデータはまずこの端末に保存され、ネット接続時にクラウドへ同期されます。
             </p>
           </div>
-          {message && <div className="rounded-md border border-mint bg-mint/15 px-3 py-2 font-bold text-emerald-700">{message}</div>}
+          {message && (
+            <div
+              className={`rounded-md border px-3 py-2 font-bold ${
+                messageIsError ? "border-danger bg-danger/10 text-danger" : "border-mint bg-mint/15 text-emerald-700"
+              }`}
+            >
+              {message}
+            </div>
+          )}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Metric label="場次数" value={`${snapshot.sessions.length}`} />
@@ -343,15 +372,30 @@ export default function DataManager() {
           <Metric label="deviceId" value={syncOverview.deviceId || settings.deviceId} />
           <Metric label="workspaceId" value={syncOverview.workspaceId || settings.workspaceId} />
         </div>
+        {syncOverview.status === "error" && syncOverview.lastError && (
+          <div className="mt-3 rounded-md border border-danger bg-danger/10 px-3 py-2 font-bold text-danger">{syncOverview.lastError}</div>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
-          <button onClick={() => void runSyncAll()} className="rounded-md bg-mint px-4 py-3 font-black text-slate-950">
-            今すぐ同期
+          <button
+            onClick={() => void handleSyncAll()}
+            disabled={syncOverview.status === "syncing"}
+            className="rounded-md bg-mint px-4 py-3 font-black text-slate-950 disabled:bg-slate-300 disabled:text-slate-500"
+          >
+            {syncOverview.status === "syncing" ? "同期中..." : "今すぐ同期"}
           </button>
-          <button onClick={() => void runPullSync()} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white">
-            クラウドから取得
+          <button
+            onClick={() => void handlePullSync()}
+            disabled={syncOverview.status === "syncing"}
+            className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white disabled:bg-slate-300 disabled:text-slate-500"
+          >
+            {syncOverview.status === "syncing" ? "取得中..." : "クラウドから取得"}
           </button>
-          <button onClick={() => void runPushSync()} className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white">
-            ローカルをアップロード
+          <button
+            onClick={() => void handlePushSync()}
+            disabled={syncOverview.status === "syncing"}
+            className="rounded-md bg-slate-700 px-4 py-3 font-bold text-white disabled:bg-slate-300 disabled:text-slate-500"
+          >
+            {syncOverview.status === "syncing" ? "アップロード中..." : "ローカルをアップロード"}
           </button>
           <button onClick={() => void disconnectCloudSync()} className="rounded-md bg-danger px-4 py-3 font-bold text-white">
             クラウド同期を解除

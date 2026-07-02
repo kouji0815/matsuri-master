@@ -3,6 +3,7 @@ import { db, ensureSeedData } from "@/lib/db";
 import { saveCustomerDisplay } from "@/lib/customerDisplay";
 import { getOrCreateDeviceId, getOrCreateWorkspaceId, setWorkspaceId as persistWorkspaceId } from "@/lib/localIdentity";
 import { getSyncStatus, pullRemoteChanges, pushLocalChanges, syncAll } from "@/lib/syncService";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import type {
   AppMode,
   AppSettings,
@@ -43,9 +44,9 @@ type AppState = {
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
   refreshSyncOverview: () => Promise<void>;
-  runSyncAll: () => Promise<void>;
-  runPushSync: () => Promise<void>;
-  runPullSync: () => Promise<void>;
+  runSyncAll: () => Promise<{ ok: boolean; message?: string }>;
+  runPushSync: () => Promise<{ ok: boolean; message?: string }>;
+  runPullSync: () => Promise<{ ok: boolean; message?: string }>;
   disconnectCloudSync: () => Promise<void>;
   saveProduct: (product: Product) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
@@ -77,6 +78,15 @@ type AppState = {
 };
 
 const now = () => new Date().toISOString();
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message) return message;
+  }
+  return fallback;
+}
 
 const baseSettings: AppSettings = {
   id: "main",
@@ -321,61 +331,82 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   runSyncAll: async () => {
     const settings = get().settings;
+    if (!isSupabaseConfigured()) {
+      await get().refreshSyncOverview();
+      return { ok: false, message: "Supabaseが設定されていません。環境変数を確認してください。" };
+    }
     if (!settings.cloudSyncEnabled) {
       await get().refreshSyncOverview();
-      return;
+      return { ok: false, message: "クラウド同期が無効になっています。設定画面で有効にしてください。" };
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      set((state) => ({ syncOverview: { ...state.syncOverview, status: "offline" } }));
+      return { ok: false, message: "オフラインのため同期できませんでした。" };
     }
     set((state) => ({ syncOverview: { ...state.syncOverview, status: "syncing" } }));
     try {
       await syncAll(settings.workspaceId);
       await get().refresh();
       await get().refreshSyncOverview();
+      return { ok: true, message: "同期が完了しました。" };
     } catch (error) {
+      const message = getErrorMessage(error, "同期に失敗しました。");
       set((state) => ({
-        syncOverview: {
-          ...state.syncOverview,
-          status: "error",
-          lastError: error instanceof Error ? error.message : "同期に失敗しました。"
-        }
+        syncOverview: { ...state.syncOverview, status: "error", lastError: message }
       }));
+      return { ok: false, message };
     }
   },
 
   runPushSync: async () => {
     const settings = get().settings;
+    if (!isSupabaseConfigured()) {
+      await get().refreshSyncOverview();
+      return { ok: false, message: "Supabaseが設定されていません。環境変数を確認してください。" };
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      set((state) => ({ syncOverview: { ...state.syncOverview, status: "offline" } }));
+      return { ok: false, message: "オフラインのためアップロードできませんでした。" };
+    }
     set((state) => ({ syncOverview: { ...state.syncOverview, status: "syncing" } }));
     try {
       await pushLocalChanges(settings.workspaceId);
       await db.settings.update("main", { lastSyncAt: now(), updatedAt: now(), syncStatus: "synced", cloudSyncedAt: now() });
       await get().refresh();
       await get().refreshSyncOverview();
+      return { ok: true, message: "ローカルをアップロードしました。" };
     } catch (error) {
+      const message = getErrorMessage(error, "アップロードに失敗しました。");
       set((state) => ({
-        syncOverview: {
-          ...state.syncOverview,
-          status: "error",
-          lastError: error instanceof Error ? error.message : "アップロードに失敗しました。"
-        }
+        syncOverview: { ...state.syncOverview, status: "error", lastError: message }
       }));
+      return { ok: false, message };
     }
   },
 
   runPullSync: async () => {
     const settings = get().settings;
+    if (!isSupabaseConfigured()) {
+      await get().refreshSyncOverview();
+      return { ok: false, message: "Supabaseが設定されていません。環境変数を確認してください。" };
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      set((state) => ({ syncOverview: { ...state.syncOverview, status: "offline" } }));
+      return { ok: false, message: "オフラインのため取得できませんでした。" };
+    }
     set((state) => ({ syncOverview: { ...state.syncOverview, status: "syncing" } }));
     try {
       await pullRemoteChanges(settings.workspaceId);
       await db.settings.update("main", { lastSyncAt: now(), updatedAt: now(), syncStatus: "synced", cloudSyncedAt: now() });
       await get().refresh();
       await get().refreshSyncOverview();
+      return { ok: true, message: "クラウドから取得しました。" };
     } catch (error) {
+      const message = getErrorMessage(error, "クラウド取得に失敗しました。");
       set((state) => ({
-        syncOverview: {
-          ...state.syncOverview,
-          status: "error",
-          lastError: error instanceof Error ? error.message : "クラウド取得に失敗しました。"
-        }
+        syncOverview: { ...state.syncOverview, status: "error", lastError: message }
       }));
+      return { ok: false, message };
     }
   },
 
