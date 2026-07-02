@@ -1,5 +1,5 @@
-const CACHE_NAME = "matsuri-master-v2";
-const APP_SHELL = ["/", "/manifest.json", "/icon.svg"];
+const CACHE_NAME = "matsuri-master-v3";
+const APP_SHELL = ["/", "/manifest.json", "/icon.svg", "/sounds/checkout.mp3"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

@@ -1,4 +1,5 @@
 let audioContext: AudioContext | null = null;
+let checkoutAudio: HTMLAudioElement | null = null;
 
 function getAudioContext() {
   if (typeof window === "undefined") return null;
@@ -60,4 +61,16 @@ export function playSaleSound(enabled: boolean, kind: "normal" | "beer" = "norma
   oscillator.connect(envelopeGain(context, 0.14, 0.13));
   oscillator.start();
   oscillator.stop(context.currentTime + 0.14);
+}
+
+// Dedicated checkout-completion sound, distinct from the synthesized playSaleSound(). Uses a
+// bundled local file (not an external URL) so playback keeps working offline.
+export function playCheckoutSound(enabled: boolean) {
+  if (!enabled) return;
+  if (typeof window === "undefined") return;
+
+  checkoutAudio ??= new Audio("/sounds/checkout.mp3");
+  checkoutAudio.volume = 0.35;
+  checkoutAudio.currentTime = 0;
+  void checkoutAudio.play().catch(() => undefined);
 }

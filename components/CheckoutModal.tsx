@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { yen } from "@/lib/calculations";
-import { playSaleSound } from "@/lib/sound";
+import { playCheckoutSound } from "@/lib/sound";
 import { useAppStore } from "@/store/useAppStore";
 import type { PaymentMethod } from "@/types";
 
@@ -43,7 +43,7 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
       setMessage(result.message ?? "会計できませんでした");
       return;
     }
-    playSaleSound(settings.soundEnabled);
+    playCheckoutSound(settings.soundEnabled);
     onCompleted();
   };
 
