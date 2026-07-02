@@ -281,6 +281,7 @@ export default function DataManager() {
 
   const handleSyncAll = async () => {
     const result = await runSyncAll();
+    await loadSnapshot();
     showMessage(result.message ?? (result.ok ? "同期が完了しました。" : "同期に失敗しました。"), !result.ok);
   };
 
@@ -295,6 +296,7 @@ export default function DataManager() {
     await createAutoBackup("クラウドから取得前の自動バックアップ");
     await loadAutoBackups();
     const result = await runPullSync();
+    await loadSnapshot();
     showMessage(result.message ?? (result.ok ? "クラウドから取得しました。" : "取得に失敗しました。"), !result.ok);
   };
 
@@ -317,6 +319,7 @@ export default function DataManager() {
 
   const handlePushSync = async () => {
     const result = await runPushSync();
+    await loadSnapshot();
     showMessage(result.message ?? (result.ok ? "ローカルをアップロードしました。" : "アップロードに失敗しました。"), !result.ok);
   };
 

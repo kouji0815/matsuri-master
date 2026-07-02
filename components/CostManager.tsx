@@ -60,7 +60,9 @@ export default function CostManager() {
   const {
     costs,
     costCategories,
+    sessions,
     selectedSession,
+    selectSession,
     saveCost,
     deleteCost,
     saveCostCategory,
@@ -162,7 +164,27 @@ export default function CostManager() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black text-gray-900">コスト一覧</h2>
-              <p className="text-sm text-gray-500">{selectedSession?.name ?? "営業場次を選択してください"}</p>
+              {sessions.length > 0 ? (
+                <label className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                  表示中の営業回
+                  <select
+                    value={selectedSession?.id ?? ""}
+                    onChange={(event) => {
+                      if (event.target.value) void selectSession(event.target.value);
+                    }}
+                    className="rounded-md border border-gray-300 bg-white px-2 py-1 font-bold text-gray-900 focus:border-blue-500 focus:outline-none"
+                  >
+                    {!selectedSession && <option value="">選択してください</option>}
+                    {sessions.map((session) => (
+                      <option key={session.id} value={session.id}>
+                        {session.name}（{session.date}）
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <p className="text-sm text-gray-500">営業場次を選択してください</p>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
@@ -217,7 +239,12 @@ export default function CostManager() {
                 </div>
               </article>
             ))}
-            {filteredCosts.length === 0 && <p className="text-gray-500">表示できるコスト記録がありません。</p>}
+            {filteredCosts.length === 0 && (
+              <p className="text-gray-500">
+                表示できるコスト記録がありません。
+                {sessions.length > 1 && "他の営業回にコストが記録されている場合は、上の「表示中の営業回」から切り替えてください。"}
+              </p>
+            )}
           </div>
         </section>
 
