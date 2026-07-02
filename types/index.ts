@@ -145,6 +145,8 @@ export type CurrentCheckoutDisplay = {
   message?: string;
 };
 
+export type CostUnitPriceMode = "gram" | "kilogram" | "piece";
+
 export type CostRecord = SyncableFields & {
   id: string;
   sessionId?: string;
@@ -155,6 +157,8 @@ export type CostRecord = SyncableFields & {
   note: string;
   date: string;
   createdAt: string;
+  unitPriceMode?: CostUnitPriceMode;
+  unitPriceBaseGrams?: number;
 };
 
 export type StockAdjustment = SyncableFields & {

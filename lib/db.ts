@@ -170,6 +170,22 @@ class MatsuriDb extends Dexie {
       settings: "id, workspaceId, syncStatus, updatedAt",
       autoBackups: "id, createdAt"
     });
+    // v6: costs gains optional unitPriceMode/unitPriceBaseGrams fields (per-record unit price
+    // override). Neither is indexed, so the store definitions are unchanged from v5 — existing
+    // cost records are left as-is and simply treat the new fields as unset (falls back to the
+    // global "肉の単価表示基準" setting) until a record is edited.
+    this.version(6).stores({
+      categories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+      costCategories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+      products: "id, workspaceId, category, enabled, syncStatus, deletedAt, sortOrder",
+      bundles: "id, workspaceId, enabled, syncStatus, deletedAt",
+      sessions: "id, workspaceId, date, status, syncStatus, deletedAt",
+      sales: "id, workspaceId, sessionId, createdAt, syncStatus, deletedAt",
+      costs: "id, workspaceId, sessionId, date, type, costCategoryId, syncStatus, deletedAt",
+      stockAdjustments: "id, workspaceId, productId, createdAt, syncStatus, deletedAt",
+      settings: "id, workspaceId, syncStatus, updatedAt",
+      autoBackups: "id, createdAt"
+    });
   }
 }
 

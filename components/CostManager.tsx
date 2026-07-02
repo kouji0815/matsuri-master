@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getCostUnitPriceLabel, yen } from "@/lib/calculations";
+import { getCostUnitPriceLabel, isMeatCategoryName, yen } from "@/lib/calculations";
 import { useAppStore } from "@/store/useAppStore";
-import type { CostCategory, CostRecord, CostType } from "@/types";
+import type { CostCategory, CostRecord, CostType, CostUnitPriceMode } from "@/types";
 
 const typeLabels: Record<CostType, string> = {
   fixed: "固定費",
@@ -213,37 +213,20 @@ export default function CostManager() {
           </div>
 
           <div className="mt-4 space-y-3">
-            {filteredCosts.map((cost) => {
-              const unitPriceLabel = getCostUnitPriceLabel(cost, costCategoryMap.get(cost.costCategoryId), settings.meatUnitPriceBaseGrams);
-              return (
-              <article key={cost.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-black text-gray-900">{cost.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {costCategoryMap.get(cost.costCategoryId) ?? "その他"} / {typeLabels[cost.type]} / {cost.date}
-                    </p>
-                    {unitPriceLabel && <p className="mt-1 text-sm font-bold text-gray-600">単価 {unitPriceLabel}</p>}
-                    {cost.note && <p className="mt-1 text-sm text-gray-500">{cost.note}</p>}
-                  </div>
-                  <strong className="text-amber-600">{yen(cost.amount)}</strong>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <button onClick={() => openEditCost(cost)} className="rounded-md bg-slate-700 px-4 py-2 font-bold text-white">
-                    編集
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm("このコストを削除しますか？")) void deleteCost(cost.id);
-                    }}
-                    className="rounded-md bg-danger px-4 py-2 font-bold text-white"
-                  >
-                    削除
-                  </button>
-                </div>
-              </article>
-              );
-            })}
+            {filteredCosts.map((cost) => (
+              <CostListItem
+                key={cost.id}
+                cost={cost}
+                categoryName={costCategoryMap.get(cost.costCategoryId) ?? "その他"}
+                typeLabel={typeLabels[cost.type]}
+                meatUnitPriceBaseGrams={settings.meatUnitPriceBaseGrams}
+                onSaveUnitPrice={(mode, baseGrams) => void saveCost({ ...cost, unitPriceMode: mode, unitPriceBaseGrams: baseGrams })}
+                onEdit={() => openEditCost(cost)}
+                onDelete={() => {
+                  if (confirm("このコストを削除しますか？")) void deleteCost(cost.id);
+                }}
+              />
+            ))}
             {filteredCosts.length === 0 && (
               <p className="text-gray-500">
                 表示できるコスト記録がありません。
@@ -373,6 +356,99 @@ export default function CostManager() {
         </div>
       )}
     </div>
+  );
+}
+
+function CostListItem({
+  cost,
+  categoryName,
+  typeLabel,
+  meatUnitPriceBaseGrams,
+  onSaveUnitPrice,
+  onEdit,
+  onDelete
+}: {
+  cost: CostRecord;
+  categoryName: string;
+  typeLabel: string;
+  meatUnitPriceBaseGrams: number;
+  onSaveUnitPrice: (mode: CostUnitPriceMode, baseGrams?: number) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const isMeat = isMeatCategoryName(categoryName);
+  const unitPriceLabel = getCostUnitPriceLabel(cost, categoryName, meatUnitPriceBaseGrams);
+  const [editingUnit, setEditingUnit] = useState(false);
+  const [draftMode, setDraftMode] = useState<CostUnitPriceMode>(cost.unitPriceMode ?? "gram");
+  const [draftBaseGrams, setDraftBaseGrams] = useState(String(cost.unitPriceBaseGrams ?? meatUnitPriceBaseGrams ?? 20));
+
+  const applyMode = (mode: CostUnitPriceMode) => {
+    setDraftMode(mode);
+    onSaveUnitPrice(mode, mode === "gram" ? Number(draftBaseGrams || meatUnitPriceBaseGrams || 20) : undefined);
+  };
+
+  const applyBaseGrams = (raw: string) => {
+    const next = raw.replace(/^0+(?=\d)/, "");
+    setDraftBaseGrams(next);
+    const parsed = Number(next);
+    if (next && parsed > 0) onSaveUnitPrice("gram", parsed);
+  };
+
+  return (
+    <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-black text-gray-900">{cost.name}</h3>
+          <p className="text-sm text-gray-500">
+            {categoryName} / {typeLabel} / {cost.date}
+          </p>
+          {cost.note && <p className="mt-1 text-sm text-gray-500">{cost.note}</p>}
+        </div>
+        <div className="text-right">
+          <strong className="text-amber-600">{yen(cost.amount)}</strong>
+          {isMeat ? (
+            editingUnit ? (
+              <div className="mt-1 flex items-center justify-end gap-1">
+                <select
+                  value={draftMode}
+                  onChange={(event) => applyMode(event.target.value as CostUnitPriceMode)}
+                  className="rounded-md border border-gray-300 bg-white px-1 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="gram">g</option>
+                  <option value="kilogram">kg</option>
+                  <option value="piece">個</option>
+                </select>
+                {draftMode === "gram" && (
+                  <input
+                    type="number"
+                    value={draftBaseGrams}
+                    onChange={(event) => applyBaseGrams(event.target.value)}
+                    className="w-16 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                  />
+                )}
+                <button onClick={() => setEditingUnit(false)} className="rounded-md bg-slate-700 px-2 py-1 text-xs font-bold text-white">
+                  閉じる
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setEditingUnit(true)} className="mt-1 block text-sm font-bold text-gray-600 underline decoration-dotted">
+                単価 {unitPriceLabel ?? "設定"}
+              </button>
+            )
+          ) : (
+            unitPriceLabel && <p className="mt-1 text-sm font-bold text-gray-600">単価 {unitPriceLabel}</p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button onClick={onEdit} className="rounded-md bg-slate-700 px-4 py-2 font-bold text-white">
+          編集
+        </button>
+        <button onClick={onDelete} className="rounded-md bg-danger px-4 py-2 font-bold text-white">
+          削除
+        </button>
+      </div>
+    </article>
   );
 }
 

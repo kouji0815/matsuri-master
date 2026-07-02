@@ -1,4 +1,4 @@
-import type { CostRecord, Product, SaleRecord, SessionSummary } from "@/types";
+import type { CostRecord, CostUnitPriceMode, Product, SaleRecord, SessionSummary } from "@/types";
 
 export const yen = (value: number) =>
   new Intl.NumberFormat("ja-JP", {
@@ -64,29 +64,54 @@ export function getLowStockProducts(products: Product[]) {
 
 const trailingQuantityPattern = /(\d+(?:\.\d+)?)\s*([^\d\s]{1,4})\s*$/;
 
+export function isMeatCategoryName(categoryName: string | undefined): boolean {
+  return categoryName?.trim() === "肉";
+}
+
+function parseTrailingQuantity(name: string): { quantity: number; unit: string } | null {
+  const match = name.match(trailingQuantityPattern);
+  if (!match) return null;
+  const quantity = Number(match[1]);
+  if (!quantity || quantity <= 0) return null;
+  return { quantity, unit: match[2] };
+}
+
+function parseGrams(quantity: number, unit: string): number | null {
+  if (/^kg$/i.test(unit)) return quantity * 1000;
+  if (/^g$/i.test(unit)) return quantity;
+  return null;
+}
+
 // Quantity/unit is not a structured field on CostRecord — it's free text embedded at the end of
 // the cost name (e.g. "おもちゃ入れる袋　400個", "ラム肉ブロック　1.5kg"). This best-effort parses
 // a trailing "<number><unit>" and returns a per-unit price label, or null when it can't be parsed
-// confidently (unrecognized text, missing quantity, or — for the meat category — a unit that
-// isn't a weight).
+// confidently (unrecognized text, missing quantity, or a weight-based mode combined with a unit
+// that isn't a weight).
+//
+// A record can override how its price is expressed via cost.unitPriceMode /
+// cost.unitPriceBaseGrams (set per-record, e.g. via an inline editor in the cost list). When
+// unset, the mode defaults to gram-based pricing (using the app-wide meatUnitPriceBaseGrams
+// setting) for the "肉" category, and per-piece pricing (using whatever unit text was parsed)
+// for every other category — this matches the original, non-customizable behavior.
 export function getCostUnitPriceLabel(cost: CostRecord, categoryName: string | undefined, meatUnitPriceBaseGrams: number): string | null {
-  const match = cost.name.match(trailingQuantityPattern);
-  if (!match) return null;
-  const quantity = Number(match[1]);
-  const unit = match[2];
-  if (!quantity || quantity <= 0) return null;
+  const parsed = parseTrailingQuantity(cost.name);
+  if (!parsed) return null;
 
-  const isMeat = categoryName?.trim() === "肉";
-  if (isMeat) {
-    let grams: number | null = null;
-    if (/^kg$/i.test(unit)) grams = quantity * 1000;
-    else if (/^g$/i.test(unit)) grams = quantity;
-    if (!grams || grams <= 0) return null;
-    const baseGrams = meatUnitPriceBaseGrams > 0 ? meatUnitPriceBaseGrams : 20;
-    const unitPrice = (cost.amount * baseGrams) / grams;
-    return `${yen(unitPrice)} / ${baseGrams}g`;
+  const mode: CostUnitPriceMode = cost.unitPriceMode ?? (isMeatCategoryName(categoryName) ? "gram" : "piece");
+
+  if (mode === "piece") {
+    const unitPrice = cost.amount / parsed.quantity;
+    const unitLabel = cost.unitPriceMode === "piece" ? "個" : parsed.unit;
+    return `${yen(unitPrice)} / ${unitLabel}`;
   }
 
-  const unitPrice = cost.amount / quantity;
-  return `${yen(unitPrice)} / ${unit}`;
+  const grams = parseGrams(parsed.quantity, parsed.unit);
+  if (!grams || grams <= 0) return null;
+
+  if (mode === "kilogram") {
+    return `${yen((cost.amount / grams) * 1000)} / kg`;
+  }
+
+  const baseGrams = cost.unitPriceBaseGrams && cost.unitPriceBaseGrams > 0 ? cost.unitPriceBaseGrams : meatUnitPriceBaseGrams > 0 ? meatUnitPriceBaseGrams : 20;
+  return `${yen((cost.amount * baseGrams) / grams)} / ${baseGrams}g`;
 }
