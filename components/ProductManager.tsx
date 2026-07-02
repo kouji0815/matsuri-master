@@ -62,6 +62,13 @@ function moveItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
   return next;
 }
 
+function costRateLabel(unitCost: number, price: number) {
+  if (price <= 0) return "-";
+  return `${((unitCost / price) * 100).toFixed(1)}%`;
+}
+
+type SaveResult = { ok: boolean; message?: string };
+
 export default function ProductManager() {
   const {
     products,
@@ -80,7 +87,9 @@ export default function ProductManager() {
 
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [productModal, setProductModal] = useState<Product | undefined>(undefined);
+  const [productModalError, setProductModalError] = useState("");
   const [categoryModal, setCategoryModal] = useState<ProductCategory | undefined>(undefined);
+  const [categoryModalError, setCategoryModalError] = useState("");
   const [editingBundle, setEditingBundle] = useState<BundleRule>(blankBundle());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -103,19 +112,52 @@ export default function ProductManager() {
     [products, selectedCategoryId]
   );
 
-  const submitProduct = async (product: Product) => {
-    if (!product.name.trim()) return;
-    await saveProduct(product);
-    setProductModal(undefined);
+  const openNewProduct = () => {
+    setProductModalError("");
+    setProductModal(blankProduct(selectedCategoryId, Math.max(0, ...categoryProducts.map((product) => product.sortOrder)) + 10));
   };
 
-  const submitCategory = async (category: ProductCategory) => {
-    if (!category.name.trim()) return;
-    await saveCategory({
-      ...category,
-      sortOrder: category.sortOrder || Math.max(0, ...categories.map((item) => item.sortOrder)) + 10
-    });
-    setCategoryModal(undefined);
+  const openEditProduct = (product: Product) => {
+    setProductModalError("");
+    setProductModal(product);
+  };
+
+  const submitProduct = async (product: Product): Promise<SaveResult> => {
+    if (!product.name.trim()) return { ok: false, message: "商品名を入力してください。" };
+    if (!product.category) return { ok: false, message: "カテゴリを選択してください。" };
+    try {
+      await saveProduct(product);
+      setProductModal(undefined);
+      setProductModalError("");
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "保存に失敗しました。もう一度お試しください。" };
+    }
+  };
+
+  const openNewCategory = () => {
+    setCategoryModalError("");
+    setCategoryModal(blankCategory(Math.max(0, ...categories.map((category) => category.sortOrder)) + 10));
+  };
+
+  const openEditCategory = (category: ProductCategory) => {
+    setCategoryModalError("");
+    setCategoryModal(category);
+  };
+
+  const submitCategory = async (category: ProductCategory): Promise<SaveResult> => {
+    if (!category.name.trim()) return { ok: false, message: "カテゴリ名を入力してください。" };
+    try {
+      await saveCategory({
+        ...category,
+        sortOrder: category.sortOrder || Math.max(0, ...categories.map((item) => item.sortOrder)) + 10
+      });
+      setCategoryModal(undefined);
+      setCategoryModalError("");
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "保存に失敗しました。もう一度お試しください。" };
+    }
   };
 
   const submitBundle = async () => {
@@ -192,57 +234,26 @@ export default function ProductManager() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[260px_1fr]">
-        <aside className="rounded-lg border border-line bg-panel p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xl font-black">カテゴリ</h2>
-            <button
-              onClick={() => setCategoryModal(blankCategory(Math.max(0, ...categories.map((category) => category.sortOrder)) + 10))}
-              className="rounded-md bg-mint px-3 py-2 font-black text-slate-950"
-            >
-              ＋ 新規
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {categories.map((category) => (
-              <div
-                key={category.id}
-                className={`rounded-lg border p-3 ${
-                  selectedCategoryId === category.id ? "border-mint bg-mint/15" : "border-line bg-white"
-                }`}
-              >
-                <button onClick={() => setSelectedCategoryId(category.id)} className="w-full text-left">
-                  <div className="flex items-center justify-between gap-2">
-                    <strong>{category.name}</strong>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
-                      {productCountByCategory.get(category.id) ?? 0}品
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-500">{category.enabled ? "表示中" : "停止"}</div>
-                </button>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  <button onClick={() => void moveCategory(category.id, "up")} className="rounded-md bg-slate-100 px-2 py-1 text-sm font-black">
-                    ↑
-                  </button>
-                  <button onClick={() => void moveCategory(category.id, "down")} className="rounded-md bg-slate-100 px-2 py-1 text-sm font-black">
-                    ↓
-                  </button>
-                  <button onClick={() => setCategoryModal(category)} className="flex-1 rounded-md bg-slate-700 px-2 py-1 text-sm font-bold text-white">
-                    編集
-                  </button>
-                  <button onClick={() => void handleDeleteCategory(category)} className="rounded-md bg-danger px-2 py-1 text-sm font-bold text-white">
-                    削除
-                  </button>
-                </div>
-              </div>
-            ))}
-            {categories.length === 0 && <p className="text-sm text-slate-500">カテゴリがありません。</p>}
-          </div>
-        </aside>
+      <div className="flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+        {categories.map((category) => (
+          <button
+            key={category.id}
+            onClick={() => setSelectedCategoryId(category.id)}
+            className={`min-h-12 rounded-md px-4 font-bold ${
+              selectedCategoryId === category.id ? "bg-mint text-slate-950" : "bg-gray-100 text-gray-700"
+            }`}
+          >
+            {category.name}
+            <span className="ml-2 text-xs opacity-70">{productCountByCategory.get(category.id) ?? 0}品</span>
+          </button>
+        ))}
+        {categories.length === 0 && <p className="text-sm text-gray-500">カテゴリがありません。右側から追加してください。</p>}
+      </div>
 
-        <section className="rounded-lg border border-line bg-panel p-4">
+      <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+        <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-black">{selectedCategory ? `${selectedCategory.name} の商品` : "カテゴリを選択してください"}</h2>
+            <h2 className="text-xl font-black text-gray-900">{selectedCategory ? `${selectedCategory.name} の商品` : "カテゴリを選択してください"}</h2>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={toggleSelectionMode}
@@ -251,9 +262,7 @@ export default function ProductManager() {
                 {selectionMode ? "選択モード終了" : "選択モード"}
               </button>
               <button
-                onClick={() =>
-                  setProductModal(blankProduct(selectedCategoryId, Math.max(0, ...categoryProducts.map((product) => product.sortOrder)) + 10))
-                }
+                onClick={openNewProduct}
                 disabled={!selectedCategoryId}
                 className="rounded-md bg-mint px-4 py-2 font-black text-slate-950 disabled:bg-slate-300 disabled:text-slate-600"
               >
@@ -297,7 +306,7 @@ export default function ProductManager() {
                 onDragStart={() => setDraggedId(product.id)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => handleDrop(product.id)}
-                className={`rounded-lg border border-line bg-white p-4 ${draggedId === product.id ? "opacity-50" : ""}`}
+                className={`rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${draggedId === product.id ? "opacity-50" : ""}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-2">
@@ -311,7 +320,7 @@ export default function ProductManager() {
                     )}
                     <div>
                       <div className="text-3xl">{product.icon}</div>
-                      <h3 className="mt-2 text-xl font-black">{product.name}</h3>
+                      <h3 className="mt-2 text-xl font-black text-gray-900">{product.name}</h3>
                     </div>
                   </div>
                   <span className={`rounded-md px-2 py-1 text-xs font-black ${product.enabled ? "bg-mint text-slate-950" : "bg-slate-700 text-white"}`}>
@@ -321,18 +330,19 @@ export default function ProductManager() {
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                   <Info label="価格" value={yen(product.price)} />
                   <Info label="原価" value={yen(product.unitCost)} />
+                  <Info label="原価率" value={costRateLabel(product.unitCost, product.price)} />
                   <Info label="初期在庫" value={`${product.initialStock}`} />
                   <Info label="現在在庫" value={`${product.currentStock}`} />
                 </div>
                 {!selectionMode && (
                   <div className="mt-4 flex gap-2">
-                    <button onClick={() => moveProductStep(product.id, "up")} className="rounded-md bg-slate-100 px-3 py-3 font-black">
+                    <button onClick={() => moveProductStep(product.id, "up")} className="rounded-md bg-gray-100 px-3 py-3 font-black text-gray-900">
                       ↑
                     </button>
-                    <button onClick={() => moveProductStep(product.id, "down")} className="rounded-md bg-slate-100 px-3 py-3 font-black">
+                    <button onClick={() => moveProductStep(product.id, "down")} className="rounded-md bg-gray-100 px-3 py-3 font-black text-gray-900">
                       ↓
                     </button>
-                    <button onClick={() => setProductModal(product)} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
+                    <button onClick={() => openEditProduct(product)} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
                       編集
                     </button>
                     <button
@@ -348,25 +358,69 @@ export default function ProductManager() {
               </article>
             ))}
             {selectedCategoryId && categoryProducts.length === 0 && (
-              <p className="text-slate-500">このカテゴリに商品がありません。「＋ 商品を追加」から作成してください。</p>
+              <p className="text-gray-500">このカテゴリに商品がありません。「＋ 商品を追加」から作成してください。</p>
             )}
           </div>
         </section>
+
+        <aside className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xl font-black text-gray-900">カテゴリ管理</h2>
+            <button onClick={openNewCategory} className="rounded-md bg-mint px-3 py-2 font-black text-slate-950">
+              ＋ 新規
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {categories.map((category) => (
+              <div
+                key={category.id}
+                className={`rounded-lg border p-3 ${
+                  selectedCategoryId === category.id ? "border-mint bg-mint/15" : "border-gray-200 bg-white"
+                }`}
+              >
+                <button onClick={() => setSelectedCategoryId(category.id)} className="w-full text-left">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="text-gray-900">{category.name}</strong>
+                    <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-bold text-gray-600">
+                      {productCountByCategory.get(category.id) ?? 0}品
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500">{category.enabled ? "表示中" : "停止"}</div>
+                </button>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button onClick={() => void moveCategory(category.id, "up")} className="rounded-md bg-gray-100 px-2 py-1 text-sm font-black text-gray-900">
+                    ↑
+                  </button>
+                  <button onClick={() => void moveCategory(category.id, "down")} className="rounded-md bg-gray-100 px-2 py-1 text-sm font-black text-gray-900">
+                    ↓
+                  </button>
+                  <button onClick={() => openEditCategory(category)} className="flex-1 rounded-md bg-slate-700 px-2 py-1 text-sm font-bold text-white">
+                    編集
+                  </button>
+                  <button onClick={() => void handleDeleteCategory(category)} className="rounded-md bg-danger px-2 py-1 text-sm font-bold text-white">
+                    削除
+                  </button>
+                </div>
+              </div>
+            ))}
+            {categories.length === 0 && <p className="text-sm text-gray-500">カテゴリがありません。</p>}
+          </div>
+        </aside>
       </div>
 
-      <section className="rounded-lg border border-line bg-panel p-4">
+      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-black">セット管理</h2>
+          <h2 className="text-xl font-black text-gray-900">セット管理</h2>
         </div>
         <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_420px]">
           <div className="space-y-2">
             {bundles.map((bundle) => (
-              <div key={bundle.id} className="rounded-md bg-white p-3">
-                <div className="flex items-center justify-between">
+              <div key={bundle.id} className="rounded-md bg-gray-50 p-3">
+                <div className="flex items-center justify-between text-gray-900">
                   <strong>{bundle.name}</strong>
                   <span>{yen(bundle.price)}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-1 text-sm text-gray-600">
                   対象: {(bundle.allowedCategoryIds ?? ["cat-skewer"]).map(categoryName).join(" / ")}
                 </p>
                 <div className="mt-2 flex gap-2">
@@ -390,27 +444,27 @@ export default function ProductManager() {
             <NumberField label="セット価格" value={editingBundle.price} onChange={(value) => setEditingBundle({ ...editingBundle, price: value })} />
             <NumberField label="対象商品の点数" value={editingBundle.itemCount} onChange={(value) => setEditingBundle({ ...editingBundle, itemCount: value })} />
             <NumberField label="値引額" value={editingBundle.discountAmount} onChange={(value) => setEditingBundle({ ...editingBundle, discountAmount: value })} />
-            <div className="rounded-md bg-white p-3">
-              <div className="mb-2 text-sm font-bold text-slate-600">セット対象カテゴリ</div>
+            <div className="rounded-md bg-gray-50 p-3">
+              <div className="mb-2 text-sm font-bold text-gray-600">セット対象カテゴリ</div>
               <div className="grid gap-2">
                 {categories.map((category) => (
-                  <label key={category.id} className="flex items-center gap-3 font-bold">
+                  <label key={category.id} className="flex items-center gap-3 font-bold text-gray-900">
                     <input type="checkbox" checked={(editingBundle.allowedCategoryIds ?? []).includes(category.id)} onChange={() => toggleBundleCategory(category.id)} />
                     {category.name}
                   </label>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-slate-600">おもちゃ等は、ここで選ばない限り串セットに入りません。</p>
+              <p className="mt-2 text-xs text-gray-600">おもちゃ等は、ここで選ばない限り串セットに入りません。</p>
             </div>
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+            <label className="flex items-center gap-3 rounded-md bg-gray-50 p-3 font-bold text-gray-900">
               <input type="checkbox" checked={editingBundle.allowChoice} onChange={(event) => setEditingBundle({ ...editingBundle, allowChoice: event.target.checked })} />
               商品を自由選択
             </label>
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+            <label className="flex items-center gap-3 rounded-md bg-gray-50 p-3 font-bold text-gray-900">
               <input type="checkbox" checked={editingBundle.includesDrink} onChange={(event) => setEditingBundle({ ...editingBundle, includesDrink: event.target.checked })} />
               ドリンクを含む
             </label>
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+            <label className="flex items-center gap-3 rounded-md bg-gray-50 p-3 font-bold text-gray-900">
               <input type="checkbox" checked={editingBundle.enabled} onChange={(event) => setEditingBundle({ ...editingBundle, enabled: event.target.checked })} />
               有効にする
             </label>
@@ -428,13 +482,14 @@ export default function ProductManager() {
         <ProductEditModal
           product={productModal}
           categories={categories}
+          error={productModalError}
           onCancel={() => setProductModal(undefined)}
           onSave={submitProduct}
         />
       )}
 
       {categoryModal !== undefined && (
-        <CategoryEditModal category={categoryModal} onCancel={() => setCategoryModal(undefined)} onSave={submitCategory} />
+        <CategoryEditModal category={categoryModal} error={categoryModalError} onCancel={() => setCategoryModal(undefined)} onSave={submitCategory} />
       )}
     </div>
   );
@@ -443,16 +498,27 @@ export default function ProductManager() {
 function ProductEditModal({
   product,
   categories,
+  error,
   onCancel,
   onSave
 }: {
   product: Product;
   categories: ProductCategory[];
+  error: string;
   onCancel: () => void;
-  onSave: (product: Product) => void;
+  onSave: (product: Product) => Promise<SaveResult>;
 }) {
   const [draft, setDraft] = useState<Product>(product);
+  const [localError, setLocalError] = useState(error);
+  const [saving, setSaving] = useState(false);
   const isNew = !product.name;
+
+  const handleSave = async () => {
+    setSaving(true);
+    const result = await onSave(draft);
+    setSaving(false);
+    if (!result.ok) setLocalError(result.message ?? "保存できませんでした。");
+  };
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
@@ -473,6 +539,7 @@ function ProductEditModal({
           </label>
           <NumberField label="販売価格" value={draft.price} onChange={(value) => setDraft({ ...draft, price: value })} />
           <NumberField label="単品原価" value={draft.unitCost} onChange={(value) => setDraft({ ...draft, unitCost: value })} />
+          <div className="rounded-md bg-slate-100 p-3 text-sm font-bold text-slate-700">原価率: {costRateLabel(draft.unitCost, draft.price)}</div>
           <NumberField label="初期在庫" value={draft.initialStock} onChange={(value) => setDraft({ ...draft, initialStock: value })} />
           <NumberField label="現在在庫" value={draft.currentStock} onChange={(value) => setDraft({ ...draft, currentStock: value })} />
           <NumberField label="警告在庫" value={draft.warningStock} onChange={(value) => setDraft({ ...draft, warningStock: value })} />
@@ -481,12 +548,13 @@ function ProductEditModal({
             有効にする
           </label>
         </div>
+        {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
         <div className="mt-5 flex gap-2">
           <button onClick={onCancel} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
             キャンセル
           </button>
-          <button onClick={() => onSave(draft)} className="flex-1 rounded-lg bg-mint font-black text-slate-950">
-            保存
+          <button onClick={() => void handleSave()} disabled={saving} className="flex-1 rounded-lg bg-mint font-black text-slate-950 disabled:bg-slate-300">
+            {saving ? "保存中..." : "保存"}
           </button>
         </div>
       </div>
@@ -496,15 +564,26 @@ function ProductEditModal({
 
 function CategoryEditModal({
   category,
+  error,
   onCancel,
   onSave
 }: {
   category: ProductCategory;
+  error: string;
   onCancel: () => void;
-  onSave: (category: ProductCategory) => void;
+  onSave: (category: ProductCategory) => Promise<SaveResult>;
 }) {
   const [draft, setDraft] = useState<ProductCategory>(category);
+  const [localError, setLocalError] = useState(error);
+  const [saving, setSaving] = useState(false);
   const isNew = !category.name;
+
+  const handleSave = async () => {
+    setSaving(true);
+    const result = await onSave(draft);
+    setSaving(false);
+    if (!result.ok) setLocalError(result.message ?? "保存できませんでした。");
+  };
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
@@ -521,12 +600,13 @@ function CategoryEditModal({
             ピークモードで表示
           </label>
         </div>
+        {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
         <div className="mt-5 flex gap-2">
           <button onClick={onCancel} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
             キャンセル
           </button>
-          <button onClick={() => onSave(draft)} className="flex-1 rounded-lg bg-mint font-black text-slate-950">
-            保存
+          <button onClick={() => void handleSave()} disabled={saving} className="flex-1 rounded-lg bg-mint font-black text-slate-950 disabled:bg-slate-300">
+            {saving ? "保存中..." : "保存"}
           </button>
         </div>
       </div>
@@ -536,9 +616,9 @@ function CategoryEditModal({
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-panel p-2">
-      <div className="text-xs text-slate-600">{label}</div>
-      <div className="font-black">{value}</div>
+    <div className="rounded-md bg-gray-50 p-2">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="font-black text-gray-900">{value}</div>
     </div>
   );
 }

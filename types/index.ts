@@ -190,6 +190,7 @@ export type SessionSummary = {
   grossProfit: number;
   netProfit: number;
   profitRate: number;
+  costRate: number;
 };
 
 export type SyncOverview = {

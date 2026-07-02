@@ -20,7 +20,7 @@ export default function SettingsPanel() {
     <section className="rounded-lg border border-line bg-panel p-4">
       <h2 className="text-2xl font-black text-slate-950">設定</h2>
       <div className="mt-4 space-y-4">
-        <label className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 p-4 font-bold text-white">
+        <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 font-bold text-gray-900 shadow-sm">
           ピークモード
           <input
             type="checkbox"
@@ -28,11 +28,11 @@ export default function SettingsPanel() {
             onChange={(event) => void updateSettings({ ...settings, highTrafficMode: event.target.checked })}
           />
         </label>
-        <label className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 p-4 font-bold text-white">
+        <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 font-bold text-gray-900 shadow-sm">
           効果音
           <input type="checkbox" checked={settings.soundEnabled} onChange={(event) => void updateSettings({ ...settings, soundEnabled: event.target.checked })} />
         </label>
-        <label className="block rounded-lg bg-slate-900 p-4 text-sm font-bold text-slate-200">
+        <label className="block rounded-lg border border-gray-200 bg-white p-4 text-sm font-bold text-gray-900 shadow-sm">
           既定の売上目標
           <input
             type="number"
@@ -47,11 +47,11 @@ export default function SettingsPanel() {
           />
         </label>
 
-        <div className="rounded-lg bg-slate-900 p-4">
-          <h3 className="text-lg font-black text-white">クラウド同期設定</h3>
-          <p className="mt-1 text-sm text-slate-300">Supabase は匿名キーのみ使用します。service role key は使いません。</p>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="text-lg font-black text-gray-900">クラウド同期設定</h3>
+          <p className="mt-1 text-sm text-gray-500">Supabase は匿名キーのみ使用します。service role key は使いません。</p>
           <div className="mt-3 grid gap-3">
-            <label className="text-sm font-bold text-slate-200">
+            <label className="text-sm font-bold text-gray-600">
               workspaceId
               <input
                 value={workspaceIdText}

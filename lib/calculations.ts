@@ -18,8 +18,9 @@ export function getSaleSummary(sales: SaleRecord[], costs: CostRecord[]): Sessio
   const grossProfit = revenue - variableCost;
   const netProfit = grossProfit - fixedCost;
   const profitRate = revenue > 0 ? netProfit / revenue : 0;
+  const costRate = revenue > 0 ? 1 - profitRate : 0;
 
-  return { revenue, quantity, variableCost, fixedCost, grossProfit, netProfit, profitRate };
+  return { revenue, quantity, variableCost, fixedCost, grossProfit, netProfit, profitRate, costRate };
 }
 
 export function getTopProducts(sales: SaleRecord[], limit = 3) {

@@ -370,14 +370,14 @@ export default function DataManager() {
                   setSelectedSessionId(session.id);
                   setFilters((current) => ({ ...current, sessionId: session.id }));
                 }}
-                className={`w-full rounded-lg border p-4 text-left ${
-                  selectedSessionId === session.id ? "border-mint bg-mint/15 text-slate-950" : "border-line bg-slate-900 text-white"
+                className={`w-full rounded-lg border p-4 text-left shadow-sm ${
+                  selectedSessionId === session.id ? "border-mint bg-mint/15 text-slate-950" : "border-gray-200 bg-white text-gray-900"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-lg font-black">{session.name}</div>
-                    <div className={`text-sm ${selectedSessionId === session.id ? "text-slate-600" : "text-slate-300"}`}>{session.date}</div>
+                    <div className={`text-sm ${selectedSessionId === session.id ? "text-slate-600" : "text-gray-500"}`}>{session.date}</div>
                   </div>
                   <span className="rounded-md bg-slate-700 px-2 py-1 text-xs font-black text-white">{sessionStatusLabel[session.status]}</span>
                 </div>
@@ -455,22 +455,22 @@ export default function DataManager() {
 
           <div className="mt-4 max-h-[540px] space-y-3 overflow-auto">
             {filteredSales.map((sale) => (
-              <article key={sale.id} className="rounded-lg border border-line bg-slate-900 p-4">
+              <article key={sale.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h4 className="font-black text-white">{sale.orderId}</h4>
-                    <p className="text-sm text-slate-300">
+                    <h4 className="font-black text-gray-900">{sale.orderId}</h4>
+                    <p className="text-sm text-gray-500">
                       {new Date(sale.createdAt).toLocaleString("ja-JP")} / {sessionMap.get(sale.sessionId)?.name ?? ""}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="font-black text-amber-300">{yen(sale.finalTotal)}</div>
-                    <div className="text-sm text-slate-300">利益 {yen(sale.grossProfit)}</div>
+                    <div className="font-black text-amber-600">{yen(sale.finalTotal)}</div>
+                    <div className="text-sm text-gray-500">利益 {yen(sale.grossProfit)}</div>
                   </div>
                 </div>
                 <div className="mt-3 space-y-2">
                   {sale.items.map((item, index) => (
-                    <div key={`${sale.id}-${item.productId}-${index}`} className="flex items-center justify-between rounded-md bg-slate-800 px-3 py-2 text-sm text-white">
+                    <div key={`${sale.id}-${item.productId}-${index}`} className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-900">
                       <span>
                         {item.productName} / {categoryMap.get(item.category)?.name ?? ""} / {item.quantity}点
                       </span>
@@ -482,7 +482,7 @@ export default function DataManager() {
                 </div>
               </article>
             ))}
-            {filteredSales.length === 0 && <p className="text-slate-500">条件に一致する販売記録はありません。</p>}
+            {filteredSales.length === 0 && <p className="text-gray-500">条件に一致する販売記録はありません。</p>}
           </div>
         </section>
       </div>
@@ -521,18 +521,18 @@ export default function DataManager() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line bg-slate-900 p-4">
-      <div className="text-sm text-slate-300">{label}</div>
-      <div className="mt-1 break-all text-lg font-black text-white">{value}</div>
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="text-sm text-gray-500">{label}</div>
+      <div className="mt-1 break-all text-lg font-black text-gray-900">{value}</div>
     </div>
   );
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-800 px-3 py-2">
-      <div className="text-xs text-slate-300">{label}</div>
-      <div className="font-black text-white">{value}</div>
+    <div className="rounded-md bg-gray-50 px-3 py-2">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="font-black text-gray-900">{value}</div>
     </div>
   );
 }

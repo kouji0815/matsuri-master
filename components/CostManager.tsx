@@ -170,16 +170,16 @@ export default function CostManager() {
 
           <div className="mt-4 space-y-3">
             {filteredCosts.map((cost) => (
-              <article key={cost.id} className="rounded-lg border border-line bg-slate-900 p-4">
+              <article key={cost.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-lg font-black text-white">{cost.name}</h3>
-                    <p className="text-sm text-slate-300">
+                    <h3 className="text-lg font-black text-gray-900">{cost.name}</h3>
+                    <p className="text-sm text-gray-500">
                       {costCategoryMap.get(cost.costCategoryId) ?? "その他"} / {typeLabels[cost.type]} / {cost.date}
                     </p>
-                    {cost.note && <p className="mt-1 text-sm text-slate-300">{cost.note}</p>}
+                    {cost.note && <p className="mt-1 text-sm text-gray-500">{cost.note}</p>}
                   </div>
-                  <strong className="text-amber-300">{yen(cost.amount)}</strong>
+                  <strong className="text-amber-600">{yen(cost.amount)}</strong>
                 </div>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -210,11 +210,11 @@ export default function CostManager() {
           <h2 className="text-xl font-black text-slate-950">分類管理</h2>
           <div className="mt-3 space-y-2">
             {costCategories.map((category) => (
-              <div key={category.id} className="rounded-md bg-slate-900 p-3">
+              <div key={category.id} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="font-black text-white">{category.name}</div>
-                    <div className="text-sm text-slate-300">{category.enabled ? "有効" : "停止"}</div>
+                    <div className="font-black text-gray-900">{category.name}</div>
+                    <div className="text-sm text-gray-500">{category.enabled ? "有効" : "停止"}</div>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setEditingCategory(category)} className="rounded-md bg-slate-700 px-3 py-2 font-bold text-white">
@@ -235,7 +235,7 @@ export default function CostManager() {
           </div>
           <div className="mt-4 grid gap-3">
             <Field label="分類名" value={editingCategory.name} onChange={(value) => setEditingCategory({ ...editingCategory, name: value })} />
-            <label className="flex items-center gap-3 rounded-md bg-slate-900 p-3 font-bold text-white">
+            <label className="flex items-center gap-3 rounded-md border border-gray-200 bg-white p-3 font-bold text-gray-900">
               <input type="checkbox" checked={editingCategory.enabled} onChange={(event) => setEditingCategory({ ...editingCategory, enabled: event.target.checked })} />
               有効にする
             </label>
