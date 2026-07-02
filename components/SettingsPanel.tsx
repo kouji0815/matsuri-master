@@ -93,7 +93,7 @@ export default function SettingsPanel() {
             value={confirmText}
             onChange={(event) => setConfirmText(event.target.value)}
             placeholder="初期化"
-            className="mt-3 w-full rounded-md border border-line bg-slate-900 p-3 text-white"
+            className="mt-3 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
           />
           <button
             disabled={confirmText !== "初期化"}

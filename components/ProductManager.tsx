@@ -250,7 +250,7 @@ export default function ProductManager() {
         {categories.length === 0 && <p className="text-sm text-gray-500">カテゴリがありません。右側から追加してください。</p>}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black text-gray-900">{selectedCategory ? `${selectedCategory.name} の商品` : "カテゴリを選択してください"}</h2>
@@ -363,7 +363,7 @@ export default function ProductManager() {
           </div>
         </section>
 
-        <aside className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
+        <aside className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:self-start">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xl font-black text-gray-900">カテゴリ管理</h2>
             <button onClick={openNewCategory} className="rounded-md bg-mint px-3 py-2 font-black text-slate-950">
@@ -522,34 +522,40 @@ function ProductEditModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-      <div className="w-full max-w-xl rounded-lg border border-line bg-white p-5 shadow-soft">
-        <h2 className="text-xl font-black">{isNew ? "商品を追加" : "商品編集"}</h2>
-        <div className="mt-4 grid gap-3">
-          <Field label="商品名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
-          <Field label="Emoji / アイコン" value={draft.icon} onChange={(value) => setDraft({ ...draft, icon: value })} />
-          <label className="text-sm font-bold text-slate-600">
-            カテゴリ
-            <select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-white p-3">
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <NumberField label="販売価格" value={draft.price} onChange={(value) => setDraft({ ...draft, price: value })} />
-          <NumberField label="単品原価" value={draft.unitCost} onChange={(value) => setDraft({ ...draft, unitCost: value })} />
-          <div className="rounded-md bg-slate-100 p-3 text-sm font-bold text-slate-700">原価率: {costRateLabel(draft.unitCost, draft.price)}</div>
-          <NumberField label="初期在庫" value={draft.initialStock} onChange={(value) => setDraft({ ...draft, initialStock: value })} />
-          <NumberField label="現在在庫" value={draft.currentStock} onChange={(value) => setDraft({ ...draft, currentStock: value })} />
-          <NumberField label="警告在庫" value={draft.warningStock} onChange={(value) => setDraft({ ...draft, warningStock: value })} />
-          <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-            有効にする
-          </label>
+      <div className="flex max-h-[92vh] w-full max-w-xl flex-col rounded-lg border border-line bg-white shadow-soft">
+        <div className="flex-1 overflow-y-auto p-5">
+          <h2 className="text-xl font-black">{isNew ? "商品を追加" : "商品編集"}</h2>
+          <div className="mt-4 grid gap-3">
+            <Field label="商品名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+            <Field label="Emoji / アイコン" value={draft.icon} onChange={(value) => setDraft({ ...draft, icon: value })} />
+            <label className="text-sm font-bold text-slate-600">
+              カテゴリ
+              <select
+                value={draft.category}
+                onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 focus:border-blue-500 focus:outline-none"
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <NumberField label="販売価格" value={draft.price} onChange={(value) => setDraft({ ...draft, price: value })} />
+            <NumberField label="単品原価" value={draft.unitCost} onChange={(value) => setDraft({ ...draft, unitCost: value })} />
+            <div className="rounded-md bg-slate-100 p-3 text-sm font-bold text-slate-700">原価率: {costRateLabel(draft.unitCost, draft.price)}</div>
+            <NumberField label="初期在庫" value={draft.initialStock} onChange={(value) => setDraft({ ...draft, initialStock: value })} />
+            <NumberField label="現在在庫" value={draft.currentStock} onChange={(value) => setDraft({ ...draft, currentStock: value })} />
+            <NumberField label="警告在庫" value={draft.warningStock} onChange={(value) => setDraft({ ...draft, warningStock: value })} />
+            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+              <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+              有効にする
+            </label>
+          </div>
+          {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
         </div>
-        {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
-        <div className="mt-5 flex gap-2">
+        <div className="flex gap-2 border-t border-line p-4">
           <button onClick={onCancel} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
             キャンセル
           </button>
@@ -587,21 +593,23 @@ function CategoryEditModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-lg border border-line bg-white p-5 shadow-soft">
-        <h2 className="text-xl font-black">{isNew ? "新しいカテゴリ" : "カテゴリ編集"}</h2>
-        <div className="mt-4 grid gap-3">
-          <Field label="カテゴリ名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
-          <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-            表示する
-          </label>
-          <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-            <input type="checkbox" checked={draft.showInHighTraffic} onChange={(event) => setDraft({ ...draft, showInHighTraffic: event.target.checked })} />
-            ピークモードで表示
-          </label>
+      <div className="flex max-h-[92vh] w-full max-w-md flex-col rounded-lg border border-line bg-white shadow-soft">
+        <div className="flex-1 overflow-y-auto p-5">
+          <h2 className="text-xl font-black">{isNew ? "新しいカテゴリ" : "カテゴリ編集"}</h2>
+          <div className="mt-4 grid gap-3">
+            <Field label="カテゴリ名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+              <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+              表示する
+            </label>
+            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
+              <input type="checkbox" checked={draft.showInHighTraffic} onChange={(event) => setDraft({ ...draft, showInHighTraffic: event.target.checked })} />
+              ピークモードで表示
+            </label>
+          </div>
+          {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
         </div>
-        {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
-        <div className="mt-5 flex gap-2">
+        <div className="flex gap-2 border-t border-line p-4">
           <button onClick={onCancel} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
             キャンセル
           </button>

@@ -416,7 +416,11 @@ export default function DataManager() {
           <div className="mt-4 grid gap-3 md:grid-cols-4">
             <label className="text-sm font-bold text-slate-600">
               場次
-              <select value={filters.sessionId} onChange={(event) => setFilters({ ...filters, sessionId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white">
+              <select
+                value={filters.sessionId}
+                onChange={(event) => setFilters({ ...filters, sessionId: event.target.value })}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 focus:border-blue-500 focus:outline-none"
+              >
                 <option value="">すべて</option>
                 {snapshot.sessions.map((session) => (
                   <option key={session.id} value={session.id}>
@@ -427,11 +431,20 @@ export default function DataManager() {
             </label>
             <label className="text-sm font-bold text-slate-600">
               日付
-              <input value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} type="date" className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white" />
+              <input
+                value={filters.date}
+                onChange={(event) => setFilters({ ...filters, date: event.target.value })}
+                type="date"
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 focus:border-blue-500 focus:outline-none"
+              />
             </label>
             <label className="text-sm font-bold text-slate-600">
               商品
-              <select value={filters.productId} onChange={(event) => setFilters({ ...filters, productId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white">
+              <select
+                value={filters.productId}
+                onChange={(event) => setFilters({ ...filters, productId: event.target.value })}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 focus:border-blue-500 focus:outline-none"
+              >
                 <option value="">すべて</option>
                 {snapshot.products.map((product) => (
                   <option key={product.id} value={product.id}>
@@ -442,7 +455,11 @@ export default function DataManager() {
             </label>
             <label className="text-sm font-bold text-slate-600">
               分類
-              <select value={filters.categoryId} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })} className="mt-1 w-full rounded-md border border-line bg-slate-900 p-3 text-white">
+              <select
+                value={filters.categoryId}
+                onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 focus:border-blue-500 focus:outline-none"
+              >
                 <option value="">すべて</option>
                 {snapshot.categories.map((category) => (
                   <option key={category.id} value={category.id}>
@@ -504,7 +521,7 @@ export default function DataManager() {
             value={deleteText}
             onChange={(event) => setDeleteText(event.target.value)}
             placeholder="DELETE"
-            className="mt-3 w-full rounded-md border border-line bg-slate-900 p-3 text-white"
+            className="mt-3 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
           />
           <button
             disabled={deleteText !== "DELETE"}

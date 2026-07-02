@@ -71,6 +71,7 @@ export default function CostManager() {
   const [editingCategory, setEditingCategory] = useState<CostCategory>(blankCostCategory(100));
   const [amountText, setAmountText] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
+  const [costModalOpen, setCostModalOpen] = useState(false);
 
   useEffect(() => {
     setEditing((current) => ({ ...current, sessionId: selectedSession?.id, costCategoryId: current.costCategoryId || firstCategoryId }));
@@ -98,6 +99,20 @@ export default function CostManager() {
     return amounts.map((item) => ({ ...item, ratio: item.amount / maxAmount }));
   }, [costCategories, costs]);
 
+  const isNewCost = !editing.name;
+
+  const openNewCost = () => {
+    setEditing(blankCost(selectedSession?.id));
+    setAmountText("");
+    setCostModalOpen(true);
+  };
+
+  const openEditCost = (cost: CostRecord) => {
+    setEditing(cost);
+    setAmountText(cost.amount === 0 ? "" : String(cost.amount));
+    setCostModalOpen(true);
+  };
+
   const submit = async () => {
     if (!editing.name.trim()) return;
     await saveCost({
@@ -108,6 +123,7 @@ export default function CostManager() {
     });
     setEditing(blankCost(selectedSession?.id));
     setAmountText("");
+    setCostModalOpen(false);
   };
 
   const submitCategory = async () => {
@@ -120,51 +136,56 @@ export default function CostManager() {
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-      <section className="space-y-4">
-        <div className="rounded-lg border border-line bg-panel p-4">
-          <div className="flex items-center justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+        <button
+          onClick={() => setFilterCategoryId("")}
+          className={`min-h-12 rounded-md px-4 font-bold ${filterCategoryId === "" ? "bg-mint text-slate-950" : "bg-gray-100 text-gray-700"}`}
+        >
+          すべて
+        </button>
+        {costCategories.filter((category) => category.enabled).map((category) => (
+          <button
+            key={category.id}
+            onClick={() => setFilterCategoryId(category.id)}
+            className={`min-h-12 rounded-md px-4 font-bold ${
+              filterCategoryId === category.id ? "bg-mint text-slate-950" : "bg-gray-100 text-gray-700"
+            }`}
+          >
+            {category.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+        <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black text-slate-950">コスト一覧</h2>
-              <p className="text-sm text-slate-600">{selectedSession?.name ?? "営業場次を選択してください"}</p>
+              <h2 className="text-2xl font-black text-gray-900">コスト一覧</h2>
+              <p className="text-sm text-gray-500">{selectedSession?.name ?? "営業場次を選択してください"}</p>
             </div>
-            <div className="text-right">
-              <div className="text-sm text-slate-600">合計</div>
-              <div className="text-2xl font-black text-amber-600">{yen(total)}</div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-sm text-gray-500">合計</div>
+                <div className="text-2xl font-black text-amber-600">{yen(total)}</div>
+              </div>
+              <button onClick={openNewCost} className="rounded-md bg-mint px-4 py-2 font-black text-slate-950">
+                ＋ コストを追加
+              </button>
             </div>
           </div>
 
-          <div className="mt-4 space-y-2 rounded-lg border border-line bg-white p-3">
+          <div className="mt-4 space-y-2 rounded-lg border border-gray-200 bg-white p-3">
             {categoryTotals.map((item, index) => (
               <div key={item.id}>
                 <div className="flex items-center justify-between text-sm text-gray-900">
                   <span>{item.name}</span>
                   <strong>{yen(item.amount)}</strong>
                 </div>
-                <div className="mt-1 h-2.5 rounded-full bg-slate-200">
+                <div className="mt-1 h-2.5 rounded-full bg-gray-200">
                   <div className={`h-2.5 rounded-full ${chartColors[index % chartColors.length]}`} style={{ width: `${item.ratio * 100}%` }} />
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              onClick={() => setFilterCategoryId("")}
-              className={`min-h-12 rounded-md px-4 font-bold ${filterCategoryId === "" ? "bg-mint text-slate-950" : "bg-slate-700 text-white"}`}
-            >
-              すべて
-            </button>
-            {costCategories.filter((category) => category.enabled).map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setFilterCategoryId(category.id)}
-                className={`min-h-12 rounded-md px-4 font-bold ${
-                  filterCategoryId === category.id ? "bg-mint text-slate-950" : "bg-slate-700 text-white"
-                }`}
-              >
-                {category.name}
-              </button>
             ))}
           </div>
 
@@ -182,13 +203,7 @@ export default function CostManager() {
                   <strong className="text-amber-600">{yen(cost.amount)}</strong>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => {
-                      setEditing(cost);
-                      setAmountText(cost.amount === 0 ? "" : String(cost.amount));
-                    }}
-                    className="rounded-md bg-slate-700 px-4 py-2 font-bold text-white"
-                  >
+                  <button onClick={() => openEditCost(cost)} className="rounded-md bg-slate-700 px-4 py-2 font-bold text-white">
                     編集
                   </button>
                   <button
@@ -202,12 +217,12 @@ export default function CostManager() {
                 </div>
               </article>
             ))}
-            {filteredCosts.length === 0 && <p className="text-slate-500">表示できるコスト記録がありません。</p>}
+            {filteredCosts.length === 0 && <p className="text-gray-500">表示できるコスト記録がありません。</p>}
           </div>
-        </div>
+        </section>
 
-        <section className="rounded-lg border border-line bg-panel p-4">
-          <h2 className="text-xl font-black text-slate-950">分類管理</h2>
+        <aside className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:self-start">
+          <h2 className="text-xl font-black text-gray-900">分類管理</h2>
           <div className="mt-3 space-y-2">
             {costCategories.map((category) => (
               <div key={category.id} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
@@ -246,83 +261,85 @@ export default function CostManager() {
               onClick={() => setEditingCategory(blankCostCategory(Math.max(0, ...costCategories.map((category) => category.sortOrder)) + 10))}
               className="rounded-md bg-slate-700 py-3 font-bold text-white"
             >
-              新規分類
+              ＋ 新規分類
             </button>
           </div>
-        </section>
-      </section>
+        </aside>
+      </div>
 
-      <aside className="rounded-lg border border-line bg-panel p-4">
-        <h2 className="text-xl font-black text-slate-950">コスト入力</h2>
-        <div className="mt-4 grid gap-3">
-          <Field label="名称" value={editing.name} onChange={(value) => setEditing({ ...editing, name: value })} />
-          <label className="text-sm font-bold text-slate-600">
-            金額
-            <input
-              type="number"
-              value={amountText}
-              placeholder="金額"
-              onChange={(event) => {
-                const next = event.target.value.replace(/^0+(?=\d)/, "");
-                setAmountText(next);
-                setEditing({ ...editing, amount: Number(next || 0) });
-              }}
-              className="mt-1 w-full rounded-md border border-line bg-slate-950 p-3 text-white"
-            />
-          </label>
-          <div>
-            <div className="mb-2 text-sm font-bold text-slate-600">分類</div>
-            <div className="grid grid-cols-2 gap-2">
-              {costCategories.filter((category) => category.enabled).map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setEditing({ ...editing, costCategoryId: category.id })}
-                  className={`min-h-14 rounded-md px-4 text-sm font-bold ${
-                    editing.costCategoryId === category.id ? "bg-mint text-slate-950" : "bg-slate-700 text-white"
-                  }`}
-                >
-                  {category.name}
-                </button>
-              ))}
+      {costModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-xl flex-col rounded-lg border border-line bg-white shadow-soft">
+            <div className="flex-1 overflow-y-auto p-5">
+              <h2 className="text-xl font-black">{isNewCost ? "コストを追加" : "コスト編集"}</h2>
+              <div className="mt-4 grid gap-3">
+                <Field label="名称" value={editing.name} onChange={(value) => setEditing({ ...editing, name: value })} />
+                <label className="text-sm font-bold text-slate-600">
+                  金額
+                  <input
+                    type="number"
+                    value={amountText}
+                    placeholder="金額"
+                    onChange={(event) => {
+                      const next = event.target.value.replace(/^0+(?=\d)/, "");
+                      setAmountText(next);
+                      setEditing({ ...editing, amount: Number(next || 0) });
+                    }}
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+                <div>
+                  <div className="mb-2 text-sm font-bold text-slate-600">分類</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {costCategories.filter((category) => category.enabled).map((category) => (
+                      <button
+                        key={category.id}
+                        onClick={() => setEditing({ ...editing, costCategoryId: category.id })}
+                        className={`min-h-14 rounded-md px-4 text-sm font-bold ${
+                          editing.costCategoryId === category.id ? "bg-mint text-slate-950" : "bg-slate-700 text-white"
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="text-sm font-bold text-slate-600">
+                  会計区分
+                  <select
+                    value={editing.type}
+                    onChange={(event) => setEditing({ ...editing, type: event.target.value as CostType })}
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 focus:border-blue-500 focus:outline-none"
+                  >
+                    {Object.entries(typeLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Field label="日付" value={editing.date} onChange={(value) => setEditing({ ...editing, date: value })} />
+                <label className="text-sm font-bold text-slate-600">
+                  メモ
+                  <textarea
+                    value={editing.note}
+                    onChange={(event) => setEditing({ ...editing, note: event.target.value })}
+                    className="mt-1 min-h-24 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-line p-4">
+              <button onClick={() => setCostModalOpen(false)} className="flex-1 rounded-md bg-slate-700 py-3 font-bold text-white">
+                キャンセル
+              </button>
+              <button onClick={() => void submit()} className="flex-1 rounded-lg bg-mint font-black text-slate-950">
+                保存
+              </button>
             </div>
           </div>
-          <label className="text-sm font-bold text-slate-600">
-            会計区分
-            <select
-              value={editing.type}
-              onChange={(event) => setEditing({ ...editing, type: event.target.value as CostType })}
-              className="mt-1 w-full rounded-md border border-line bg-slate-950 p-3 text-white"
-            >
-              {Object.entries(typeLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Field label="日付" value={editing.date} onChange={(value) => setEditing({ ...editing, date: value })} />
-          <label className="text-sm font-bold text-slate-600">
-            メモ
-            <textarea
-              value={editing.note}
-              onChange={(event) => setEditing({ ...editing, note: event.target.value })}
-              className="mt-1 min-h-24 w-full rounded-md border border-line bg-slate-950 p-3 text-white"
-            />
-          </label>
-          <button onClick={submit} className="min-h-14 rounded-lg bg-mint font-black text-slate-950">
-            保存
-          </button>
-          <button
-            onClick={() => {
-              setEditing(blankCost(selectedSession?.id));
-              setAmountText("");
-            }}
-            className="rounded-md bg-slate-700 py-3 font-bold text-white"
-          >
-            新規入力
-          </button>
         </div>
-      </aside>
+      )}
     </div>
   );
 }
@@ -331,7 +348,11 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <label className="text-sm font-bold text-slate-600">
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-md border border-line bg-slate-950 p-3 text-white" />
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+      />
     </label>
   );
 }

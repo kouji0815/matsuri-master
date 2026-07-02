@@ -30,7 +30,7 @@ export default function StockAdjustModal({ product, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-      <div className="w-full max-w-xl rounded-lg border border-line bg-panel p-5 shadow-soft">
+      <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-lg border border-line bg-panel p-5 shadow-soft">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-black">在庫調整</h2>
