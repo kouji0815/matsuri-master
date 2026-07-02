@@ -33,7 +33,7 @@ export default function ProductButton({ product, onSell, onLongPress, activeFlas
       onPointerDown={startPress}
       onPointerUp={cancelPress}
       onPointerLeave={cancelPress}
-      className={`min-h-32 rounded-lg border p-4 text-left shadow-soft transition duration-150 active:scale-95 ${
+      className={`block h-full min-h-32 w-full rounded-lg border p-4 text-left shadow-soft transition duration-150 active:scale-95 ${
         soldOut
           ? "border-slate-200 bg-slate-100 text-slate-500"
           : warning
