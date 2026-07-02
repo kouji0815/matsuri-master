@@ -9,7 +9,6 @@ import type { PaymentMethod } from "@/types";
 const paymentOptions: { value: PaymentMethod; label: string }[] = [
   { value: "cash", label: "現金" },
   { value: "paypay", label: "PayPay" },
-  { value: "creditCard", label: "クレジットカード" },
   { value: "other", label: "その他" }
 ];
 
