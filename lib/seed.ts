@@ -211,5 +211,6 @@ export const seedSettings: AppSettings = {
   cloudSyncEnabled: true,
   createdAt: now(),
   currentCheckoutDisplay: undefined,
+  meatUnitPriceBaseGrams: 20,
   ...syncFields()
 };

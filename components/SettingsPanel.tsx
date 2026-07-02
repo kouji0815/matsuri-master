@@ -9,11 +9,13 @@ export default function SettingsPanel() {
   const [confirmText, setConfirmText] = useState("");
   const [defaultTargetSalesText, setDefaultTargetSalesText] = useState(settings.defaultTargetSales === 0 ? "" : String(settings.defaultTargetSales));
   const [workspaceIdText, setWorkspaceIdText] = useState(settings.workspaceId);
+  const [meatUnitPriceBaseGramsText, setMeatUnitPriceBaseGramsText] = useState(String(settings.meatUnitPriceBaseGrams ?? 20));
 
   useEffect(() => {
     setDefaultTargetSalesText(settings.defaultTargetSales === 0 ? "" : String(settings.defaultTargetSales));
     setWorkspaceIdText(settings.workspaceId);
-  }, [settings.defaultTargetSales, settings.workspaceId]);
+    setMeatUnitPriceBaseGramsText(String(settings.meatUnitPriceBaseGrams ?? 20));
+  }, [settings.defaultTargetSales, settings.workspaceId, settings.meatUnitPriceBaseGrams]);
 
   const supabaseEnvStatus = useMemo(() => getSupabasePublicEnvStatus(), []);
 
@@ -47,6 +49,23 @@ export default function SettingsPanel() {
               void updateSettings({ ...settings, defaultTargetSales: Number(next || 0) });
             }}
             className="mt-2 w-full rounded-md border border-line bg-white p-3 text-slate-950"
+          />
+        </label>
+
+        <label className="block rounded-lg border border-gray-200 bg-white p-4 text-sm font-bold text-gray-900 shadow-sm">
+          肉の単価表示基準（g）
+          <p className="mt-1 text-xs font-normal text-gray-500">コスト管理ページで「肉」分類の記録に、この重量あたりの単価を表示します（例：20gなら「20gあたりいくら」）。</p>
+          <input
+            type="number"
+            value={meatUnitPriceBaseGramsText}
+            placeholder="20"
+            onChange={(event) => {
+              const next = event.target.value.replace(/^0+(?=\d)/, "");
+              setMeatUnitPriceBaseGramsText(next);
+              const parsed = Number(next);
+              if (next && parsed > 0) void updateSettings({ ...settings, meatUnitPriceBaseGrams: parsed });
+            }}
+            className="mt-2 w-full rounded-md border border-gray-300 bg-white p-3 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
           />
         </label>
 

@@ -180,6 +180,7 @@ export type AppSettings = SyncableFields & {
   lastSyncAt?: string;
   supabaseUrl?: string;
   currentCheckoutDisplay?: CurrentCheckoutDisplay;
+  meatUnitPriceBaseGrams: number;
 };
 
 export type SessionSummary = {

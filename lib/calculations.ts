@@ -61,3 +61,32 @@ export function getRecentRevenue(sales: SaleRecord[], minutes = 30) {
 export function getLowStockProducts(products: Product[]) {
   return products.filter((product) => product.enabled && product.currentStock > 0 && product.currentStock <= product.warningStock);
 }
+
+const trailingQuantityPattern = /(\d+(?:\.\d+)?)\s*([^\d\s]{1,4})\s*$/;
+
+// Quantity/unit is not a structured field on CostRecord — it's free text embedded at the end of
+// the cost name (e.g. "おもちゃ入れる袋　400個", "ラム肉ブロック　1.5kg"). This best-effort parses
+// a trailing "<number><unit>" and returns a per-unit price label, or null when it can't be parsed
+// confidently (unrecognized text, missing quantity, or — for the meat category — a unit that
+// isn't a weight).
+export function getCostUnitPriceLabel(cost: CostRecord, categoryName: string | undefined, meatUnitPriceBaseGrams: number): string | null {
+  const match = cost.name.match(trailingQuantityPattern);
+  if (!match) return null;
+  const quantity = Number(match[1]);
+  const unit = match[2];
+  if (!quantity || quantity <= 0) return null;
+
+  const isMeat = categoryName?.trim() === "肉";
+  if (isMeat) {
+    let grams: number | null = null;
+    if (/^kg$/i.test(unit)) grams = quantity * 1000;
+    else if (/^g$/i.test(unit)) grams = quantity;
+    if (!grams || grams <= 0) return null;
+    const baseGrams = meatUnitPriceBaseGrams > 0 ? meatUnitPriceBaseGrams : 20;
+    const unitPrice = (cost.amount * baseGrams) / grams;
+    return `${yen(unitPrice)} / ${baseGrams}g`;
+  }
+
+  const unitPrice = cost.amount / quantity;
+  return `${yen(unitPrice)} / ${unit}`;
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { yen } from "@/lib/calculations";
+import { getCostUnitPriceLabel, yen } from "@/lib/calculations";
 import { useAppStore } from "@/store/useAppStore";
 import type { CostCategory, CostRecord, CostType } from "@/types";
 
@@ -14,7 +14,7 @@ const typeLabels: Record<CostType, string> = {
 };
 
 const chartColors = [
-  "bg-amber-500",
+  "bg-orange-500",
   "bg-emerald-500",
   "bg-sky-500",
   "bg-violet-500",
@@ -63,6 +63,7 @@ export default function CostManager() {
     sessions,
     selectedSession,
     selectSession,
+    settings,
     saveCost,
     deleteCost,
     saveCostCategory,
@@ -212,7 +213,9 @@ export default function CostManager() {
           </div>
 
           <div className="mt-4 space-y-3">
-            {filteredCosts.map((cost) => (
+            {filteredCosts.map((cost) => {
+              const unitPriceLabel = getCostUnitPriceLabel(cost, costCategoryMap.get(cost.costCategoryId), settings.meatUnitPriceBaseGrams);
+              return (
               <article key={cost.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -220,6 +223,7 @@ export default function CostManager() {
                     <p className="text-sm text-gray-500">
                       {costCategoryMap.get(cost.costCategoryId) ?? "その他"} / {typeLabels[cost.type]} / {cost.date}
                     </p>
+                    {unitPriceLabel && <p className="mt-1 text-sm font-bold text-gray-600">単価 {unitPriceLabel}</p>}
                     {cost.note && <p className="mt-1 text-sm text-gray-500">{cost.note}</p>}
                   </div>
                   <strong className="text-amber-600">{yen(cost.amount)}</strong>
@@ -238,7 +242,8 @@ export default function CostManager() {
                   </button>
                 </div>
               </article>
-            ))}
+              );
+            })}
             {filteredCosts.length === 0 && (
               <p className="text-gray-500">
                 表示できるコスト記録がありません。

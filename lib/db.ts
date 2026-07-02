@@ -255,7 +255,8 @@ export async function ensureSeedData() {
         ...settings,
         workspaceId: settings.workspaceId || getOrCreateWorkspaceId(),
         deviceId: settings.deviceId || getOrCreateDeviceId(),
-        cloudSyncEnabled: settings.cloudSyncEnabled ?? true
+        cloudSyncEnabled: settings.cloudSyncEnabled ?? true,
+        meatUnitPriceBaseGrams: settings.meatUnitPriceBaseGrams ?? 20
       },
       now()
     ) as AppSettings;

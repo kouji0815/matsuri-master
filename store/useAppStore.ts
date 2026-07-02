@@ -99,7 +99,8 @@ const baseSettings: AppSettings = {
   createdAt: now(),
   updatedAt: now(),
   syncStatus: "pending",
-  deletedAt: null
+  deletedAt: null,
+  meatUnitPriceBaseGrams: 20
 };
 
 const emptyDisplay: CurrentCheckoutDisplay = {
