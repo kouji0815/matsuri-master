@@ -51,7 +51,13 @@ const tableConfigs: TableConfig[] = [
 const entityFieldMaps: Record<LocalTable, Record<string, string>> = {
   categories: { sortOrder: "sort_order", showInHighTraffic: "show_in_high_traffic" },
   costCategories: { sortOrder: "sort_order" },
-  products: { unitCost: "unit_cost", initialStock: "initial_stock", currentStock: "current_stock", warningStock: "warning_stock" },
+  products: {
+    unitCost: "unit_cost",
+    initialStock: "initial_stock",
+    currentStock: "current_stock",
+    warningStock: "warning_stock",
+    sortOrder: "sort_order"
+  },
   bundles: {
     itemCount: "item_count",
     allowChoice: "allow_choice",
@@ -102,7 +108,7 @@ const entityFieldMaps: Record<LocalTable, Record<string, string>> = {
 const entityFields: Record<LocalTable, string[]> = {
   categories: ["name", "enabled", "sortOrder", "showInHighTraffic"],
   costCategories: ["name", "enabled", "sortOrder"],
-  products: ["name", "icon", "category", "price", "unitCost", "initialStock", "currentStock", "warningStock", "enabled"],
+  products: ["name", "icon", "category", "price", "unitCost", "initialStock", "currentStock", "warningStock", "enabled", "sortOrder"],
   bundles: ["name", "price", "itemCount", "allowChoice", "includesDrink", "allowedCategoryIds", "discountAmount", "enabled"],
   sessions: ["name", "date", "location", "startedAt", "endedAt", "targetSales", "status"],
   sales: [

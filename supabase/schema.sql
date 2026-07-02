@@ -47,6 +47,7 @@ create table if not exists products (
   initial_stock integer not null default 0,
   current_stock integer not null default 0,
   warning_stock integer not null default 0,
+  sort_order integer not null default 0,
   enabled boolean not null default true,
   sync_status text not null default 'pending',
   created_at timestamptz not null default now(),
@@ -54,6 +55,9 @@ create table if not exists products (
   deleted_at timestamptz,
   cloud_synced_at timestamptz
 );
+
+alter table if exists products
+  add column if not exists sort_order integer not null default 0;
 
 create table if not exists set_menus (
   id text primary key,
