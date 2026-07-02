@@ -13,6 +13,13 @@ import type { BundleRule, Product, Session } from "@/types";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+function moveItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...list];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 function makeQuickSession(targetSales: number): Session {
   return {
     id: `session-${crypto.randomUUID()}`,
@@ -48,6 +55,7 @@ export default function Dashboard() {
     startSession,
     undoLastSale,
     closeActiveSession,
+    reorderProducts,
     setMode
   } = useAppStore();
   const [bundle, setBundle] = useState<BundleRule | null>(null);
@@ -55,6 +63,7 @@ export default function Dashboard() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [flashProductId, setFlashProductId] = useState("");
+  const [draggedProductId, setDraggedProductId] = useState("");
   const [quickSession, setQuickSession] = useState<Session>(() => selectedSession ?? makeQuickSession(settings.defaultTargetSales));
 
   useEffect(() => {
@@ -168,6 +177,16 @@ export default function Dashboard() {
           {visibleCategories.map((category) => {
             const categoryProducts = enabledProducts.filter((product) => product.category === category.id);
             if (categoryProducts.length === 0) return null;
+
+            const handleProductDrop = (targetId: string) => {
+              if (!draggedProductId || draggedProductId === targetId) return;
+              const fromIndex = categoryProducts.findIndex((product) => product.id === draggedProductId);
+              const toIndex = categoryProducts.findIndex((product) => product.id === targetId);
+              if (fromIndex < 0 || toIndex < 0) return;
+              void reorderProducts(category.id, moveItem(categoryProducts, fromIndex, toIndex).map((product) => product.id));
+              setDraggedProductId("");
+            };
+
             return (
               <section key={category.id}>
                 <div className="mb-3 flex items-center gap-3">
@@ -176,14 +195,23 @@ export default function Dashboard() {
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                   {categoryProducts.map((product) => (
-                    <ProductButton
+                    <div
                       key={product.id}
-                      product={product}
-                      onSell={handleAddProduct}
-                      onLongPress={setStockProduct}
-                      activeFlash={flashProductId === product.id}
-                      selectedQuantity={selectedCounts[product.id] ?? 0}
-                    />
+                      draggable
+                      onDragStart={() => setDraggedProductId(product.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => handleProductDrop(product.id)}
+                      onDragEnd={() => setDraggedProductId("")}
+                      className={draggedProductId === product.id ? "opacity-50" : ""}
+                    >
+                      <ProductButton
+                        product={product}
+                        onSell={handleAddProduct}
+                        onLongPress={setStockProduct}
+                        activeFlash={flashProductId === product.id}
+                        selectedQuantity={selectedCounts[product.id] ?? 0}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>
