@@ -47,7 +47,7 @@ export type Product = SyncableFields & {
   currentStock: number;
   warningStock: number;
   enabled: boolean;
-  sortOrder: number;
+  sortOrder?: number;
   createdAt: string;
 };
 

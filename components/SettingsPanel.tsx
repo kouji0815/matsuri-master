@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getSupabasePublicEnvStatus } from "@/lib/supabaseClient";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function SettingsPanel() {
@@ -14,7 +15,7 @@ export default function SettingsPanel() {
     setWorkspaceIdText(settings.workspaceId);
   }, [settings.defaultTargetSales, settings.workspaceId]);
 
-  const supabaseConfigured = useMemo(() => Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY), []);
+  const supabaseEnvStatus = useMemo(() => getSupabasePublicEnvStatus(), []);
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
@@ -28,10 +29,12 @@ export default function SettingsPanel() {
             onChange={(event) => void updateSettings({ ...settings, highTrafficMode: event.target.checked })}
           />
         </label>
+
         <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 font-bold text-gray-900 shadow-sm">
           効果音
           <input type="checkbox" checked={settings.soundEnabled} onChange={(event) => void updateSettings({ ...settings, soundEnabled: event.target.checked })} />
         </label>
+
         <label className="block rounded-lg border border-gray-200 bg-white p-4 text-sm font-bold text-gray-900 shadow-sm">
           既定の売上目標
           <input
@@ -50,6 +53,7 @@ export default function SettingsPanel() {
         <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="text-lg font-black text-gray-900">クラウド同期設定</h3>
           <p className="mt-1 text-sm text-gray-500">Supabase は匿名キーのみ使用します。service role key は使いません。</p>
+
           <div className="mt-3 grid gap-3">
             <label className="text-sm font-bold text-gray-600">
               workspaceId
@@ -59,6 +63,7 @@ export default function SettingsPanel() {
                 className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950"
               />
             </label>
+
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => void updateSettings({ ...settings, workspaceId: workspaceIdText.trim() || settings.workspaceId, cloudSyncEnabled: true })}
@@ -77,8 +82,10 @@ export default function SettingsPanel() {
                 新しい workspaceId を生成
               </button>
             </div>
+
             <div className="grid gap-2 md:grid-cols-2">
-              <Info label="Supabase 設定" value={supabaseConfigured ? "設定済み" : "未設定"} />
+              <Info label="Supabase 設定" value={supabaseEnvStatus.configured ? "設定済み" : "未設定"} />
+              <Info label="Env 判定" value={supabaseEnvStatus.configured ? "URL / KEY 読み込み済み" : `不足: ${supabaseEnvStatus.missingKeys.join(", ")}`} />
               <Info label="同期状態" value={syncOverview.status === "syncing" ? "同期中" : syncOverview.status === "error" ? "エラー" : syncOverview.status === "offline" ? "オフライン" : "待機中"} />
               <Info label="deviceId" value={settings.deviceId} />
               <Info label="最終同期" value={settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString("ja-JP") : "未同期"} />

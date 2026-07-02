@@ -3,7 +3,7 @@ import { db, ensureSeedData } from "@/lib/db";
 import { saveCustomerDisplay } from "@/lib/customerDisplay";
 import { getOrCreateDeviceId, getOrCreateWorkspaceId, setWorkspaceId as persistWorkspaceId } from "@/lib/localIdentity";
 import { getSyncStatus, pullRemoteChanges, pushLocalChanges, syncAll } from "@/lib/syncService";
-import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import { getSupabasePublicEnvStatus, isSupabaseConfigured } from "@/lib/supabaseClient";
 import type {
   AppMode,
   AppSettings,
@@ -123,6 +123,12 @@ const emptySyncOverview: SyncOverview = {
   workspaceId: baseSettings.workspaceId,
   deviceId: baseSettings.deviceId
 };
+
+function getSupabaseConfigMessage() {
+  const status = getSupabasePublicEnvStatus();
+  if (status.configured) return null;
+  return `Supabaseが設定されていません。${status.missingKeys.join(" / ")} を確認してください。`;
+}
 
 const newestOpenSession = (sessions: Session[]) =>
   sessions
@@ -333,7 +339,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const settings = get().settings;
     if (!isSupabaseConfigured()) {
       await get().refreshSyncOverview();
-      return { ok: false, message: "Supabaseが設定されていません。環境変数を確認してください。" };
+      return { ok: false, message: getSupabaseConfigMessage() ?? "Supabaseが設定されていません。環境変数を確認してください。" };
     }
     if (!settings.cloudSyncEnabled) {
       await get().refreshSyncOverview();
@@ -362,7 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const settings = get().settings;
     if (!isSupabaseConfigured()) {
       await get().refreshSyncOverview();
-      return { ok: false, message: "Supabaseが設定されていません。環境変数を確認してください。" };
+      return { ok: false, message: getSupabaseConfigMessage() ?? "Supabaseが設定されていません。環境変数を確認してください。" };
     }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set((state) => ({ syncOverview: { ...state.syncOverview, status: "offline" } }));
@@ -388,7 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const settings = get().settings;
     if (!isSupabaseConfigured()) {
       await get().refreshSyncOverview();
-      return { ok: false, message: "Supabaseが設定されていません。環境変数を確認してください。" };
+      return { ok: false, message: getSupabaseConfigMessage() ?? "Supabaseが設定されていません。環境変数を確認してください。" };
     }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set((state) => ({ syncOverview: { ...state.syncOverview, status: "offline" } }));

@@ -114,7 +114,7 @@ export default function ProductManager() {
 
   const openNewProduct = () => {
     setProductModalError("");
-    setProductModal(blankProduct(selectedCategoryId, Math.max(0, ...categoryProducts.map((product) => product.sortOrder)) + 10));
+    setProductModal(blankProduct(selectedCategoryId, Math.max(0, ...categoryProducts.map((product) => product.sortOrder ?? 0)) + 10));
   };
 
   const openEditProduct = (product: Product) => {
@@ -660,3 +660,4 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
     </label>
   );
 }
+
