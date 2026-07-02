@@ -754,9 +754,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     await db.transaction("rw", [db.sessions, db.sales, db.costs], async () => {
       await softDelete(db.sessions, sessionId);
       const sales = await db.sales.where("sessionId").equals(sessionId).toArray();
-      const costs = await db.costs.where("sessionId").equals(sessionId).toArray();
       await Promise.all(sales.map((sale) => softDelete(db.sales, sale.id)));
-      await Promise.all(costs.map((cost) => softDelete(db.costs, cost.id)));
+      // Costs are preserved, not deleted: a fixed cost (e.g. venue rental) can outlive the
+      // specific session it happened to be entered under. Unlink it (sessionId cleared) instead
+      // of soft-deleting it, so the record survives as "session未設定" and stays editable.
+      const costs = await db.costs.where("sessionId").equals(sessionId).toArray();
+      await Promise.all(
+        costs.map((cost) => db.costs.update(cost.id, { sessionId: undefined, updatedAt: now(), syncStatus: "pending" }))
+      );
     });
     set({ selectedSession: undefined });
     await get().refresh();

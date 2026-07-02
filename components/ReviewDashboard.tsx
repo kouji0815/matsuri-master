@@ -47,7 +47,7 @@ export default function ReviewDashboard() {
       alert("営業中の場次は削除できません。先に終了してください。");
       return;
     }
-    if (confirm(`${sessionName} を削除しますか？販売とコストも削除対象になります。`)) {
+    if (confirm(`${sessionName} を削除しますか？この営業回の売上記録も削除されます。コスト記録は削除されず「営業回未設定」として残ります。`)) {
       await deleteSession(sessionId);
     }
   };

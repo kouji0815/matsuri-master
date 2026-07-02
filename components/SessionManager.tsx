@@ -41,9 +41,9 @@ export default function SessionManager() {
       setMessage("営業中の回は削除できません。先に収店してください。");
       return;
     }
-    if (confirm(`${session.name} を削除しますか？売上とコスト記録も削除されます。`)) {
+    if (confirm(`${session.name} を削除しますか？この営業回の売上記録も削除されます。コスト記録は削除されず「営業回未設定」として残ります。`)) {
       await deleteSession(session.id);
-      setMessage("営業回を削除しました");
+      setMessage("営業回を削除しました（コスト記録は「営業回未設定」として保持されています）");
     }
   };
 

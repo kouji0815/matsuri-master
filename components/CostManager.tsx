@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getCostUnitPriceLabel, isMeatCategoryName, yen } from "@/lib/calculations";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getCostUnitPriceLabel, yen } from "@/lib/calculations";
+import { db } from "@/lib/db";
 import { useAppStore } from "@/store/useAppStore";
 import type { CostCategory, CostRecord, CostType, CostUnitPriceMode } from "@/types";
+
+const UNASSIGNED_SESSION_VALUE = "__unassigned__";
 
 const typeLabels: Record<CostType, string> = {
   fixed: "固定費",
@@ -75,23 +78,36 @@ export default function CostManager() {
   const [amountText, setAmountText] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [costModalOpen, setCostModalOpen] = useState(false);
+  const [viewingUnassigned, setViewingUnassigned] = useState(false);
+  const [unassignedCosts, setUnassignedCosts] = useState<CostRecord[]>([]);
+
+  // Costs left behind by a deleted session (sessionId cleared, not removed) live outside any
+  // session's scope. They're loaded on demand here rather than folded into the store's
+  // session-scoped `costs`, so they never silently inflate another session's profit totals.
+  const loadUnassignedCosts = useCallback(async () => {
+    const rows = await db.costs.filter((cost) => !cost.sessionId && cost.workspaceId === settings.workspaceId && !cost.deletedAt).toArray();
+    setUnassignedCosts(rows);
+  }, [settings.workspaceId]);
+
+  const activeSessionId = viewingUnassigned ? "" : selectedSession?.id;
+  const displayedCosts = viewingUnassigned ? unassignedCosts : costs;
 
   useEffect(() => {
-    setEditing((current) => ({ ...current, sessionId: selectedSession?.id, costCategoryId: current.costCategoryId || firstCategoryId }));
-  }, [firstCategoryId, selectedSession?.id]);
+    setEditing((current) => ({ ...current, sessionId: activeSessionId, costCategoryId: current.costCategoryId || firstCategoryId }));
+  }, [firstCategoryId, activeSessionId]);
 
   useEffect(() => {
     setAmountText(editing.amount === 0 ? "" : String(editing.amount));
   }, [editing.amount]);
 
-  const total = costs.reduce((sum, cost) => sum + cost.amount, 0);
+  const total = displayedCosts.reduce((sum, cost) => sum + cost.amount, 0);
   const costCategoryMap = useMemo(() => new Map(costCategories.map((category) => [category.id, category.name])), [costCategories]);
   const filteredCosts = useMemo(
     () =>
-      costs
+      displayedCosts
         .filter((cost) => !filterCategoryId || cost.costCategoryId === filterCategoryId)
         .sort((a, b) => b.amount - a.amount),
-    [costs, filterCategoryId]
+    [displayedCosts, filterCategoryId]
   );
   const categoryTotals = useMemo(() => {
     const amounts = costCategories
@@ -99,16 +115,26 @@ export default function CostManager() {
       .map((category) => ({
         id: category.id,
         name: category.name,
-        amount: costs.filter((cost) => cost.costCategoryId === category.id).reduce((sum, cost) => sum + cost.amount, 0)
+        amount: displayedCosts.filter((cost) => cost.costCategoryId === category.id).reduce((sum, cost) => sum + cost.amount, 0)
       }));
     const maxAmount = Math.max(1, ...amounts.map((item) => item.amount));
     return amounts.map((item) => ({ ...item, ratio: item.amount / maxAmount }));
-  }, [costCategories, costs]);
+  }, [costCategories, displayedCosts]);
 
   const isNewCost = !editing.name;
 
+  const selectRealSession = (sessionId: string) => {
+    setViewingUnassigned(false);
+    void selectSession(sessionId);
+  };
+
+  const selectUnassignedView = () => {
+    setViewingUnassigned(true);
+    void loadUnassignedCosts();
+  };
+
   const openNewCost = () => {
-    setEditing(blankCost(selectedSession?.id));
+    setEditing(blankCost(activeSessionId));
     setAmountText("");
     setCostModalOpen(true);
   };
@@ -123,11 +149,12 @@ export default function CostManager() {
     if (!editing.name.trim()) return;
     await saveCost({
       ...editing,
-      sessionId: selectedSession?.id,
+      sessionId: activeSessionId,
       costCategoryId: editing.costCategoryId || firstCategoryId,
       amount: Number(amountText || 0)
     });
-    setEditing(blankCost(selectedSession?.id));
+    if (viewingUnassigned) await loadUnassignedCosts();
+    setEditing(blankCost(activeSessionId));
     setAmountText("");
     setCostModalOpen(false);
   };
@@ -172,18 +199,23 @@ export default function CostManager() {
                 <label className="mt-1 flex items-center gap-2 text-sm text-gray-500">
                   表示中の営業回
                   <select
-                    value={selectedSession?.id ?? ""}
+                    value={viewingUnassigned ? UNASSIGNED_SESSION_VALUE : (selectedSession?.id ?? "")}
                     onChange={(event) => {
-                      if (event.target.value) void selectSession(event.target.value);
+                      if (event.target.value === UNASSIGNED_SESSION_VALUE) {
+                        selectUnassignedView();
+                      } else if (event.target.value) {
+                        selectRealSession(event.target.value);
+                      }
                     }}
                     className="rounded-md border border-gray-300 bg-white px-2 py-1 font-bold text-gray-900 focus:border-blue-500 focus:outline-none"
                   >
-                    {!selectedSession && <option value="">選択してください</option>}
+                    {!selectedSession && !viewingUnassigned && <option value="">選択してください</option>}
                     {sessions.map((session) => (
                       <option key={session.id} value={session.id}>
                         {session.name}（{session.date}）
                       </option>
                     ))}
+                    <option value={UNASSIGNED_SESSION_VALUE}>（営業回未設定のコスト）</option>
                   </select>
                 </label>
               ) : (
@@ -223,17 +255,25 @@ export default function CostManager() {
                 categoryName={costCategoryMap.get(cost.costCategoryId) ?? "その他"}
                 typeLabel={typeLabels[cost.type]}
                 meatUnitPriceBaseGrams={settings.meatUnitPriceBaseGrams}
-                onSaveUnitPrice={(mode, baseGrams) => void saveCost({ ...cost, unitPriceMode: mode, unitPriceBaseGrams: baseGrams })}
+                onSaveUnitPrice={(mode, baseGrams) => {
+                  void saveCost({ ...cost, unitPriceMode: mode, unitPriceBaseGrams: baseGrams }).then(() => {
+                    if (viewingUnassigned) void loadUnassignedCosts();
+                  });
+                }}
                 onEdit={() => openEditCost(cost)}
                 onDelete={() => {
-                  if (confirm("このコストを削除しますか？")) void deleteCost(cost.id);
+                  if (!confirm("このコストを削除しますか？")) return;
+                  void deleteCost(cost.id).then(() => {
+                    if (viewingUnassigned) void loadUnassignedCosts();
+                  });
                 }}
               />
             ))}
             {filteredCosts.length === 0 && (
               <p className="text-gray-500">
-                表示できるコスト記録がありません。
-                {sessions.length > 1 && "他の営業回にコストが記録されている場合は、上の「表示中の営業回」から切り替えてください。"}
+                {viewingUnassigned
+                  ? "営業回が未設定のコストはありません。"
+                  : <>表示できるコスト記録がありません。{sessions.length > 1 && "他の営業回にコストが記録されている場合は、上の「表示中の営業回」から切り替えてください。"}</>}
               </p>
             )}
           </div>
@@ -379,10 +419,9 @@ function CostListItem({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const isMeat = isMeatCategoryName(categoryName);
   const unitPriceLabel = getCostUnitPriceLabel(cost, categoryName, meatUnitPriceBaseGrams);
   const [editingUnit, setEditingUnit] = useState(false);
-  const [draftMode, setDraftMode] = useState<CostUnitPriceMode>(cost.unitPriceMode ?? (isMeat ? "gram" : "piece"));
+  const [draftMode, setDraftMode] = useState<CostUnitPriceMode>(cost.unitPriceMode ?? "gram");
   const [draftBaseGrams, setDraftBaseGrams] = useState(String(cost.unitPriceBaseGrams ?? meatUnitPriceBaseGrams ?? 20));
 
   const applyMode = (mode: CostUnitPriceMode) => {

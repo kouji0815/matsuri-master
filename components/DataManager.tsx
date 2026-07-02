@@ -240,6 +240,32 @@ export default function DataManager() {
     showMessage("現在の場次 CSV を出力しました。");
   };
 
+  // Deletes only this session's sales records — the session itself and its cost records (which
+  // may now include costs left "session未設定" by other sessions) are never touched here.
+  const deleteSessionSalesOnly = async () => {
+    if (!selectedSession) return;
+    if (selectedSessionSales.length === 0) {
+      showMessage("この場次には削除できる売上記録がありません。");
+      return;
+    }
+    if (
+      !confirm(
+        `「${selectedSession.name}」の売上記録 ${selectedSessionSales.length} 件のみを削除します。コスト記録・商品データ・他の場次のデータは削除されません。念のため事前に「完全バックアップ JSON」の取得を推奨します。続行しますか？`
+      )
+    ) {
+      return;
+    }
+    await createAutoBackup(`「${selectedSession.name}」の売上削除前の自動バックアップ`);
+    const deletedAt = new Date().toISOString();
+    const salesToDelete = await db.sales.where("sessionId").equals(selectedSession.id).toArray();
+    await Promise.all(salesToDelete.map((sale) => db.sales.update(sale.id, { deletedAt, updatedAt: deletedAt, syncStatus: "pending" })));
+    await refresh();
+    await loadSnapshot();
+    await loadAutoBackups();
+    await refreshSyncOverview();
+    showMessage(`「${selectedSession.name}」の売上記録を削除しました（コスト記録は保持されています）。`);
+  };
+
   const importBackup = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -488,6 +514,21 @@ export default function DataManager() {
               </button>
             </div>
           </div>
+
+          {selectedSession && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-danger bg-danger/10 p-3">
+              <p className="flex-1 text-sm text-slate-600">
+                「{selectedSession.name}」の売上記録（{selectedSessionSales.length}件）のみを削除します。コスト記録・商品データ・他の場次は削除されません。実行前に「完全バックアップ JSON」の取得を推奨します。
+              </p>
+              <button
+                onClick={() => void deleteSessionSalesOnly()}
+                disabled={selectedSessionSales.length === 0}
+                className="rounded-md bg-danger px-4 py-3 font-bold text-white disabled:bg-slate-300 disabled:text-slate-500"
+              >
+                この場次の売上記録のみ削除
+              </button>
+            </div>
+          )}
 
           <div className="mt-4 grid gap-3 md:grid-cols-4">
             <label className="text-sm font-bold text-slate-600">
