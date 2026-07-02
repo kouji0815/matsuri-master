@@ -470,30 +470,41 @@ function CostListItem({
         <div className="text-right">
           <strong className="text-amber-600">{yen(cost.amount)}</strong>
           {editingUnit ? (
-            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-              <input
-                type="number"
-                value={draftMode === "gram" ? draftBaseGrams : ""}
-                placeholder={draftMode === "gram" ? "20" : "1"}
-                onChange={(event) => updateDraftBaseGrams(event.target.value)}
-                disabled={draftMode !== "gram"}
-                className="w-20 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 placeholder:text-gray-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 focus:border-blue-500 focus:outline-none"
-              />
-              <select
-                value={draftMode}
-                onChange={(event) => setDraftMode(event.target.value as CostUnitPriceMode)}
-                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="gram">g</option>
-                <option value="kilogram">kg</option>
-                <option value="piece">個</option>
-              </select>
-              <button onClick={saveDraft} className="rounded-md bg-mint px-3 py-1 text-xs font-black text-slate-950">
-                確定
-              </button>
-              <button onClick={closeEditor} className="rounded-md bg-slate-700 px-3 py-1 text-xs font-bold text-white">
-                閉じる
-              </button>
+            <div className="mt-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {draftMode === "gram" && (
+                  <input
+                    type="number"
+                    value={draftBaseGrams}
+                    placeholder="20"
+                    onChange={(event) => updateDraftBaseGrams(event.target.value)}
+                    autoFocus
+                    className="w-20 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none"
+                  />
+                )}
+                <select
+                  value={draftMode}
+                  onChange={(event) => setDraftMode(event.target.value as CostUnitPriceMode)}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="gram">g</option>
+                  <option value="kilogram">kg</option>
+                  <option value="piece">個</option>
+                </select>
+                <button onClick={saveDraft} className="rounded-md bg-mint px-3 py-1 text-xs font-black text-slate-950">
+                  確定
+                </button>
+                <button onClick={closeEditor} className="rounded-md bg-slate-700 px-3 py-1 text-xs font-bold text-white">
+                  閉じる
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {draftMode === "gram"
+                  ? "指定したグラム数あたりの単価を計算します。"
+                  : draftMode === "kilogram"
+                    ? "1kgあたりの単価を計算します（数量の入力は不要です）。"
+                    : "名称末尾の数量（例:「30個」）を使って1個あたりの単価を計算します（数量の入力は不要です）。"}
+              </p>
             </div>
           ) : (
             <button onClick={() => setEditingUnit(true)} className="mt-1 block text-sm font-bold text-gray-600 underline decoration-dotted">
