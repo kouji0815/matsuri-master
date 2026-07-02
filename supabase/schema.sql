@@ -7,7 +7,7 @@ create table if not exists devices (
 );
 
 create table if not exists categories (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   name text not null,
@@ -22,7 +22,7 @@ create table if not exists categories (
 );
 
 create table if not exists cost_categories (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   name text not null,
@@ -36,7 +36,7 @@ create table if not exists cost_categories (
 );
 
 create table if not exists products (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   name text not null,
@@ -60,7 +60,7 @@ alter table if exists products
   add column if not exists sort_order integer not null default 0;
 
 create table if not exists set_menus (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   name text not null,
@@ -79,7 +79,7 @@ create table if not exists set_menus (
 );
 
 create table if not exists sessions (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   name text not null,
@@ -97,7 +97,7 @@ create table if not exists sessions (
 );
 
 create table if not exists sales (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   order_id text not null,
@@ -122,7 +122,7 @@ create table if not exists sales (
 );
 
 create table if not exists costs (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   session_id text,
@@ -140,7 +140,7 @@ create table if not exists costs (
 );
 
 create table if not exists stock_adjustments (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   product_id text not null,
@@ -156,7 +156,7 @@ create table if not exists stock_adjustments (
 );
 
 create table if not exists app_settings (
-  id text primary key,
+  id text not null,
   workspace_id text not null,
   device_id text not null,
   high_traffic_mode boolean not null default false,
@@ -182,6 +182,39 @@ create table if not exists current_checkout_display (
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );
+
+-- Seed data (products, categories, bundles, etc.) uses fixed ids such as "prod-beer" or
+-- "cat-skewer" on every device, and app_settings always uses id = "main". A single-column
+-- primary key on "id" therefore causes two different workspaces to collide on the same row and
+-- silently overwrite each other's data on sync. Re-key each synced table to a composite primary
+-- key on (workspace_id, id) so uniqueness is scoped per workspace instead of globally.
+-- Safe to run multiple times; does not drop any table or delete any row.
+alter table if exists categories drop constraint if exists categories_pkey;
+alter table if exists categories add constraint categories_pkey primary key (workspace_id, id);
+
+alter table if exists cost_categories drop constraint if exists cost_categories_pkey;
+alter table if exists cost_categories add constraint cost_categories_pkey primary key (workspace_id, id);
+
+alter table if exists products drop constraint if exists products_pkey;
+alter table if exists products add constraint products_pkey primary key (workspace_id, id);
+
+alter table if exists set_menus drop constraint if exists set_menus_pkey;
+alter table if exists set_menus add constraint set_menus_pkey primary key (workspace_id, id);
+
+alter table if exists sessions drop constraint if exists sessions_pkey;
+alter table if exists sessions add constraint sessions_pkey primary key (workspace_id, id);
+
+alter table if exists sales drop constraint if exists sales_pkey;
+alter table if exists sales add constraint sales_pkey primary key (workspace_id, id);
+
+alter table if exists costs drop constraint if exists costs_pkey;
+alter table if exists costs add constraint costs_pkey primary key (workspace_id, id);
+
+alter table if exists stock_adjustments drop constraint if exists stock_adjustments_pkey;
+alter table if exists stock_adjustments add constraint stock_adjustments_pkey primary key (workspace_id, id);
+
+alter table if exists app_settings drop constraint if exists app_settings_pkey;
+alter table if exists app_settings add constraint app_settings_pkey primary key (workspace_id, id);
 
 alter table categories enable row level security;
 alter table cost_categories enable row level security;

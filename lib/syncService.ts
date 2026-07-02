@@ -249,8 +249,13 @@ export async function pushLocalChanges(workspaceId: string) {
 
     try {
       const payload = rows.map((row) => toRemoteRecord(local, row));
+      // Records are uniquely identified per-workspace, not globally: seed data (e.g. "prod-beer")
+      // and app_settings ("main") reuse the same fixed id across every workspace. The remote
+      // primary key is (workspace_id, id) — see supabase/schema.sql — so upserts must target
+      // that composite key, otherwise two different workspaces' rows with the same id would
+      // overwrite each other.
       const { error } = await (client.from(remote) as never as { upsert: (rows: unknown[], options: { onConflict: string }) => Promise<{ error: Error | null }> }).upsert(payload, {
-        onConflict: "id"
+        onConflict: "workspace_id,id"
       });
       if (error) throw error;
 
