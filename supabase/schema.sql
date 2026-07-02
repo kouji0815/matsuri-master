@@ -227,23 +227,52 @@ alter table stock_adjustments enable row level security;
 alter table app_settings enable row level security;
 alter table current_checkout_display enable row level security;
 
+drop policy if exists "workspace read categories" on categories;
 create policy "workspace read categories" on categories for select using (true);
+drop policy if exists "workspace write categories" on categories;
 create policy "workspace write categories" on categories for all using (true) with check (true);
+
+drop policy if exists "workspace read cost_categories" on cost_categories;
 create policy "workspace read cost_categories" on cost_categories for select using (true);
+drop policy if exists "workspace write cost_categories" on cost_categories;
 create policy "workspace write cost_categories" on cost_categories for all using (true) with check (true);
+
+drop policy if exists "workspace read products" on products;
 create policy "workspace read products" on products for select using (true);
+drop policy if exists "workspace write products" on products;
 create policy "workspace write products" on products for all using (true) with check (true);
+
+drop policy if exists "workspace read set_menus" on set_menus;
 create policy "workspace read set_menus" on set_menus for select using (true);
+drop policy if exists "workspace write set_menus" on set_menus;
 create policy "workspace write set_menus" on set_menus for all using (true) with check (true);
+
+drop policy if exists "workspace read sessions" on sessions;
 create policy "workspace read sessions" on sessions for select using (true);
+drop policy if exists "workspace write sessions" on sessions;
 create policy "workspace write sessions" on sessions for all using (true) with check (true);
+
+drop policy if exists "workspace read sales" on sales;
 create policy "workspace read sales" on sales for select using (true);
+drop policy if exists "workspace write sales" on sales;
 create policy "workspace write sales" on sales for all using (true) with check (true);
+
+drop policy if exists "workspace read costs" on costs;
 create policy "workspace read costs" on costs for select using (true);
+drop policy if exists "workspace write costs" on costs;
 create policy "workspace write costs" on costs for all using (true) with check (true);
+
+drop policy if exists "workspace read stock_adjustments" on stock_adjustments;
 create policy "workspace read stock_adjustments" on stock_adjustments for select using (true);
+drop policy if exists "workspace write stock_adjustments" on stock_adjustments;
 create policy "workspace write stock_adjustments" on stock_adjustments for all using (true) with check (true);
+
+drop policy if exists "workspace read app_settings" on app_settings;
 create policy "workspace read app_settings" on app_settings for select using (true);
+drop policy if exists "workspace write app_settings" on app_settings;
 create policy "workspace write app_settings" on app_settings for all using (true) with check (true);
+
+drop policy if exists "workspace read current_checkout_display" on current_checkout_display;
 create policy "workspace read current_checkout_display" on current_checkout_display for select using (true);
+drop policy if exists "workspace write current_checkout_display" on current_checkout_display;
 create policy "workspace write current_checkout_display" on current_checkout_display for all using (true) with check (true);
