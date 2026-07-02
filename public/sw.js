@@ -1,4 +1,4 @@
-const CACHE_NAME = "matsuri-master-v1";
+const CACHE_NAME = "matsuri-master-v2";
 const APP_SHELL = ["/", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (event) => {

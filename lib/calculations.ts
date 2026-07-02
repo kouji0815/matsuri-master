@@ -115,3 +115,19 @@ export function getCostUnitPriceLabel(cost: CostRecord, categoryName: string | u
   const baseGrams = cost.unitPriceBaseGrams && cost.unitPriceBaseGrams > 0 ? cost.unitPriceBaseGrams : meatUnitPriceBaseGrams > 0 ? meatUnitPriceBaseGrams : 20;
   return `${yen((cost.amount * baseGrams) / grams)} / ${baseGrams}g`;
 }
+
+// Explains why getCostUnitPriceLabel would return null for the given cost/mode combination, so
+// the editor can tell the user *why* nothing is showing instead of silently doing nothing —
+// e.g. "豚肉ブロック" (no trailing quantity in the name) can never produce a price in any mode.
+export function getCostUnitPriceIssue(cost: CostRecord, mode: CostUnitPriceMode): string | null {
+  const parsed = parseTrailingQuantity(cost.name);
+  if (!parsed) {
+    return "名称に数量が含まれていないため単価を計算できません。名称の末尾に「2kg」「30個」のように数量を追記してから、もう一度お試しください。";
+  }
+  if (mode === "piece") return null;
+  const grams = parseGrams(parsed.quantity, parsed.unit);
+  if (!grams) {
+    return `名称の数量「${parsed.quantity}${parsed.unit}」は重量として認識できないため、${mode === "kilogram" ? "kg" : "g"}単位では計算できません。「個」を選ぶか、名称の数量を「500g」のような表記に変更してください。`;
+  }
+  return null;
+}

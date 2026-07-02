@@ -17,6 +17,17 @@ export default function Home() {
   useEffect(() => {
     void hydrate();
     if ("serviceWorker" in navigator) {
+      // Once a newly-deployed service worker takes control of this page, reload once so the
+      // user actually gets the new JS bundle instead of silently continuing to run the stale
+      // one that was already loaded into this tab (a stale SW was the root cause of several
+      // "fixed but still broken" reports — code changes deployed fine, but open tabs kept
+      // executing the old cached app shell until manually hard-refreshed).
+      let reloadedForUpdate = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloadedForUpdate) return;
+        reloadedForUpdate = true;
+        window.location.reload();
+      });
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
   }, [hydrate]);

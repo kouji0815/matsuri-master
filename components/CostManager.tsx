@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCostUnitPriceLabel, yen } from "@/lib/calculations";
+import { getCostUnitPriceIssue, getCostUnitPriceLabel, yen } from "@/lib/calculations";
 import { db } from "@/lib/db";
 import { useAppStore } from "@/store/useAppStore";
 import type { CostCategory, CostRecord, CostType, CostUnitPriceMode } from "@/types";
@@ -457,6 +457,18 @@ function CostListItem({
     setEditingUnit(false);
   };
 
+  // Live preview of what "確定" would produce, computed from the in-progress draft — this is
+  // what tells the user *why* nothing appears if the name has no parseable quantity, instead of
+  // silently doing nothing after they confirm.
+  const draftBaseGramsNumber = Number(draftBaseGrams || meatUnitPriceBaseGrams || 20);
+  const previewCost: CostRecord = {
+    ...cost,
+    unitPriceMode: draftMode,
+    unitPriceBaseGrams: draftMode === "gram" ? (Number.isFinite(draftBaseGramsNumber) && draftBaseGramsNumber > 0 ? draftBaseGramsNumber : meatUnitPriceBaseGrams || 20) : undefined
+  };
+  const previewLabel = getCostUnitPriceLabel(previewCost, categoryName, meatUnitPriceBaseGrams);
+  const previewIssue = previewLabel ? null : getCostUnitPriceIssue(cost, draftMode);
+
   return (
     <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -505,6 +517,11 @@ function CostListItem({
                     ? "1kgあたりの単価を計算します（数量の入力は不要です）。"
                     : "名称末尾の数量（例:「30個」）を使って1個あたりの単価を計算します（数量の入力は不要です）。"}
               </p>
+              {previewLabel ? (
+                <p className="mt-1 text-xs font-bold text-emerald-700">確定すると: {previewLabel}</p>
+              ) : (
+                previewIssue && <p className="mt-1 text-xs font-bold text-danger">{previewIssue}</p>
+              )}
             </div>
           ) : (
             <button onClick={() => setEditingUnit(true)} className="mt-1 block text-sm font-bold text-gray-600 underline decoration-dotted">
