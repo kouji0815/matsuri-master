@@ -37,6 +37,25 @@ function makeQuickSession(targetSales: number): Session {
   };
 }
 
+// Prefills the quick-start form from the last-viewed session (name/date/location/targetSales as
+// convenience defaults) but always issues a fresh id — otherwise editing the date to start a new
+// day's session would silently rename and reopen the old (already-closed) session instead of
+// creating a distinct one, dragging its historical sales along with it.
+function cloneAsQuickSession(base: Session): Session {
+  return {
+    ...base,
+    id: `session-${crypto.randomUUID()}`,
+    status: "planned",
+    startedAt: undefined,
+    endedAt: undefined,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    syncStatus: "pending",
+    cloudSyncedAt: undefined,
+    deletedAt: null
+  };
+}
+
 export default function Dashboard() {
   const {
     products,
@@ -64,10 +83,12 @@ export default function Dashboard() {
   const [message, setMessage] = useState("");
   const [flashProductId, setFlashProductId] = useState("");
   const [draggedProductId, setDraggedProductId] = useState("");
-  const [quickSession, setQuickSession] = useState<Session>(() => selectedSession ?? makeQuickSession(settings.defaultTargetSales));
+  const [quickSession, setQuickSession] = useState<Session>(() =>
+    selectedSession ? cloneAsQuickSession(selectedSession) : makeQuickSession(settings.defaultTargetSales)
+  );
 
   useEffect(() => {
-    if (!activeSession && selectedSession) setQuickSession(selectedSession);
+    if (!activeSession && selectedSession) setQuickSession(cloneAsQuickSession(selectedSession));
   }, [activeSession, selectedSession]);
 
   const summary = useMemo(() => getSaleSummary(sales, costs), [sales, costs]);

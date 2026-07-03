@@ -1,11 +1,44 @@
 ﻿"use client";
 
+import { useEffect, useState } from "react";
 import { downloadTextFile, salesToCsv } from "@/lib/csv";
 import { getHourlySales, getSaleSummary, getTopProducts, yen } from "@/lib/calculations";
 import { useAppStore } from "@/store/useAppStore";
+import type { Session } from "@/types";
+
+const blankSession = (targetSales: number): Session => ({
+  id: `session-${crypto.randomUUID()}`,
+  name: "",
+  date: new Date().toISOString().slice(0, 10),
+  location: "",
+  targetSales,
+  status: "planned",
+  createdAt: new Date().toISOString(),
+  workspaceId: "",
+  deviceId: "",
+  updatedAt: new Date().toISOString(),
+  syncStatus: "pending",
+  deletedAt: null
+});
 
 export default function ReviewDashboard() {
-  const { sessions, selectedSession, sales, costs, products, categories, costCategories, selectSession, deleteSession, deleteSale } = useAppStore();
+  const {
+    sessions,
+    selectedSession,
+    sales,
+    costs,
+    products,
+    categories,
+    costCategories,
+    settings,
+    selectSession,
+    saveSession,
+    startSession,
+    deleteSession,
+    deleteSale
+  } = useAppStore();
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [sessionMessage, setSessionMessage] = useState("");
   const summary = getSaleSummary(sales, costs);
   const top = getTopProducts(sales, 10);
   const hourly = getHourlySales(sales);
@@ -51,13 +84,25 @@ export default function ReviewDashboard() {
     downloadTextFile(`matsuri-review-${selectedSession?.date ?? "session"}.csv`, salesToCsv(sales, selectedSession));
   };
 
+  const submitSession = async () => {
+    if (!editingSession || !editingSession.name.trim()) return;
+    await saveSession(editingSession);
+    setEditingSession(null);
+  };
+
+  const startSessionById = async (sessionId: string) => {
+    const result = await startSession(sessionId);
+    setSessionMessage(result.ok ? "営業を開始しました" : result.message ?? "開始できませんでした");
+  };
+
   const removeSession = async (sessionId: string, sessionName: string, isOpen: boolean) => {
     if (isOpen) {
-      alert("営業中の場次は削除できません。先に終了してください。");
+      setSessionMessage("営業中の回は削除できません。先に収店してください。");
       return;
     }
-    if (confirm(`${sessionName} を削除しますか？この場次の売上記録も削除対象になります。`)) {
+    if (confirm(`${sessionName} を削除しますか？この営業回の売上記録も削除されます。コスト記録は削除されず「営業回未設定」として残ります。`)) {
       await deleteSession(sessionId);
+      setSessionMessage("営業回を削除しました（コスト記録は「営業回未設定」として保持されています）");
     }
   };
 
@@ -70,7 +115,38 @@ export default function ReviewDashboard() {
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
       <aside className="no-print rounded-lg border border-line bg-panel p-4">
-        <h2 className="text-xl font-black text-slate-950">営業場次</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-black text-slate-950">営業場次</h2>
+          <button
+            onClick={() => setEditingSession(blankSession(settings.defaultTargetSales))}
+            className="rounded-md bg-mint px-3 py-2 text-sm font-black text-slate-950"
+          >
+            ＋新規
+          </button>
+        </div>
+
+        {sessionMessage && <p className="mt-3 rounded-md bg-mint/15 p-3 text-sm font-bold text-emerald-700">{sessionMessage}</p>}
+
+        {editingSession && (
+          <div className="mt-4 rounded-lg border border-line bg-white p-3">
+            <h3 className="font-black text-slate-950">{sessions.some((session) => session.id === editingSession.id) ? "営業回編集" : "営業回新規作成"}</h3>
+            <div className="mt-3 grid gap-3">
+              <Field label="営業回名" value={editingSession.name} onChange={(value) => setEditingSession({ ...editingSession, name: value })} />
+              <Field label="日付" value={editingSession.date} onChange={(value) => setEditingSession({ ...editingSession, date: value })} />
+              <Field label="場所" value={editingSession.location} onChange={(value) => setEditingSession({ ...editingSession, location: value })} />
+              <NumberField label="売上目標" value={editingSession.targetSales} onChange={(value) => setEditingSession({ ...editingSession, targetSales: value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => void submitSession()} className="rounded-lg bg-mint py-3 font-black text-slate-950">
+                  保存
+                </button>
+                <button onClick={() => setEditingSession(null)} className="rounded-md bg-slate-700 py-3 font-bold text-white">
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 space-y-2">
           {sessions.map((session) => (
             <div key={session.id} className={`rounded-md border p-2 ${selectedSession?.id === session.id ? "border-mint bg-mint/20" : "border-gray-200 bg-white shadow-sm"}`}>
@@ -78,9 +154,17 @@ export default function ReviewDashboard() {
                 <div className="font-black">{session.name}</div>
                 <div className="text-sm text-slate-600">{session.date}</div>
               </button>
-              <button onClick={() => void removeSession(session.id, session.name, session.status === "open")} className="mt-1 w-full rounded-md bg-danger py-2 text-sm font-black text-white">
-                削除
-              </button>
+              <div className="mt-1 grid grid-cols-3 gap-1">
+                <button onClick={() => setEditingSession(session)} className="rounded-md bg-slate-700 py-2 text-sm font-bold text-white">
+                  編集
+                </button>
+                <button onClick={() => void startSessionById(session.id)} className="rounded-md bg-mint py-2 text-sm font-black text-slate-950">
+                  開始
+                </button>
+                <button onClick={() => void removeSession(session.id, session.name, session.status === "open")} className="rounded-md bg-danger py-2 text-sm font-black text-white">
+                  削除
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -277,5 +361,35 @@ function Metric({ label, value }: { label: string; value: string }) {
       <div className="text-sm text-slate-500">{label}</div>
       <div className="mt-1 text-2xl font-black text-slate-950">{value}</div>
     </div>
+  );
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="text-sm font-bold text-slate-600">
+      {label}
+      <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950" />
+    </label>
+  );
+}
+
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  const [text, setText] = useState(value === 0 ? "" : String(value));
+
+  useEffect(() => {
+    setText(value === 0 ? "" : String(value));
+  }, [value]);
+
+  const handleChange = (raw: string) => {
+    const next = raw.replace(/^0+(?=\d)/, "");
+    setText(next);
+    onChange(Number(next || 0));
+  };
+
+  return (
+    <label className="text-sm font-bold text-slate-600">
+      {label}
+      <input type="number" value={text} placeholder="0" onChange={(event) => handleChange(event.target.value)} className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950" />
+    </label>
   );
 }

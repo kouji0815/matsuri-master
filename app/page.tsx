@@ -7,7 +7,6 @@ import DataManager from "@/components/DataManager";
 import ModeSwitcher from "@/components/ModeSwitcher";
 import ProductManager from "@/components/ProductManager";
 import ReviewDashboard from "@/components/ReviewDashboard";
-import SessionManager from "@/components/SessionManager";
 import SettingsPanel from "@/components/SettingsPanel";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -69,12 +68,7 @@ export default function Home() {
         {mode === "cost" && <CostManager />}
         {mode === "review" && <ReviewDashboard />}
         {mode === "data" && <DataManager />}
-        {mode === "settings" && (
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <SessionManager />
-            <SettingsPanel />
-          </div>
-        )}
+        {mode === "settings" && <SettingsPanel />}
       </div>
     </main>
   );
