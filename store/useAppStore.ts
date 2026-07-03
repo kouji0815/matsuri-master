@@ -814,6 +814,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await db.sessions.update(sessionId, { status: "open", startedAt: now(), endedAt: undefined, updatedAt: now(), syncStatus: "pending" });
     });
     await get().refresh();
+    await get().selectSession(sessionId); // 新開始のsessionを強制的に選択session化する
     await get().refreshSyncOverview();
     return { ok: true };
   },
