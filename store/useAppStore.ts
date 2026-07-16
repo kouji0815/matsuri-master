@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { db, ensureSeedData } from "@/lib/db";
 import { saveCustomerDisplay } from "@/lib/customerDisplay";
+import { broadcastCartUpdate, broadcastCheckoutComplete } from "@/lib/customerDisplaySync";
 import { getOrCreateDeviceId, getOrCreateWorkspaceId, setWorkspaceId as persistWorkspaceId } from "@/lib/localIdentity";
 import { getSyncStatus, pullRemoteChanges, pushLocalChanges, syncAll } from "@/lib/syncService";
 import { getSupabasePublicEnvStatus, isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -229,8 +230,13 @@ function buildDisplay(
   };
 }
 
-function publishDisplay(display: CurrentCheckoutDisplay) {
+function publishDisplay(display: CurrentCheckoutDisplay, workspaceId: string) {
   saveCustomerDisplay(display);
+  if (display.status === "completed") {
+    void broadcastCheckoutComplete(workspaceId, display);
+  } else {
+    void broadcastCartUpdate(workspaceId, display);
+  }
 }
 
 function withSync<T extends { id: string; createdAt?: string; workspaceId?: string; deviceId?: string; deletedAt?: string | null }>(
@@ -287,7 +293,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrate: async () => {
     await ensureSeedData();
     await get().refresh();
-    publishDisplay(get().checkoutDisplay);
+    publishDisplay(get().checkoutDisplay, get().settings.workspaceId);
     await get().refreshSyncOverview();
     set({ loading: false });
   },
@@ -563,7 +569,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ];
     const display = buildDisplay(nextCart);
     set({ cartItems: nextCart, checkoutDisplay: display });
-    publishDisplay(display);
+    publishDisplay(display, get().settings.workspaceId);
     return { ok: true };
   },
 
@@ -604,7 +610,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     ];
     const display = buildDisplay(nextCart);
     set({ cartItems: nextCart, checkoutDisplay: display });
-    publishDisplay(display);
+    publishDisplay(display, get().settings.workspaceId);
     return { ok: true };
   },
 
@@ -612,13 +618,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const nextCart = get().cartItems.filter((item) => item.id !== cartItemId);
     const display = buildDisplay(nextCart);
     set({ cartItems: nextCart, checkoutDisplay: display });
-    publishDisplay(display);
+    publishDisplay(display, get().settings.workspaceId);
   },
 
   clearCart: () => {
     const display = buildDisplay([]);
     set({ cartItems: [], checkoutDisplay: display });
-    publishDisplay(display);
+    publishDisplay(display, get().settings.workspaceId);
   },
 
   checkoutCart: async (input) => {
@@ -682,7 +688,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const completedDisplay = buildDisplay(cartItems, { ...input, discountAmount, receivedAmount }, "completed");
     await db.settings.update("main", { currentCheckoutDisplay: completedDisplay, updatedAt: now(), syncStatus: "pending" });
     set({ cartItems: [], checkoutDisplay: completedDisplay });
-    publishDisplay(completedDisplay);
+    publishDisplay(completedDisplay, settings.workspaceId);
     await get().refresh();
     await get().refreshSyncOverview();
     return { ok: true };

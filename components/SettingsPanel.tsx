@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
 import { getSupabasePublicEnvStatus } from "@/lib/supabaseClient";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -18,6 +19,21 @@ export default function SettingsPanel() {
   }, [settings.defaultTargetSales, settings.workspaceId, settings.meatUnitPriceBaseGrams]);
 
   const supabaseEnvStatus = useMemo(() => getSupabasePublicEnvStatus(), []);
+  const [pairingQrDataUrl, setPairingQrDataUrl] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(settings.workspaceId, { margin: 1, width: 240 })
+      .then((dataUrl) => {
+        if (!cancelled) setPairingQrDataUrl(dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPairingQrDataUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.workspaceId]);
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
@@ -109,6 +125,18 @@ export default function SettingsPanel() {
               <Info label="deviceId" value={settings.deviceId} />
               <Info label="最終同期" value={settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString("ja-JP") : "未同期"} />
             </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="text-lg font-black text-gray-900">顧客ディスプレイ</h3>
+          <p className="mt-1 text-sm text-gray-500">客用 iPad でこのQRコードをスキャンしてください。</p>
+          <div className="mt-3 flex flex-col items-center gap-3 rounded-lg border border-gray-200 bg-panel p-4">
+            {pairingQrDataUrl ? (
+              <img src={pairingQrDataUrl} alt="顧客ディスプレイ ペアリング用QRコード" className="h-48 w-48 rounded-md bg-white p-2" />
+            ) : (
+              <div className="grid h-48 w-48 place-items-center rounded-md bg-white text-sm text-slate-500">QRコード生成中...</div>
+            )}
           </div>
         </div>
 
