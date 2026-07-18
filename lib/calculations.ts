@@ -1,4 +1,24 @@
-import type { CostRecord, CostUnitPriceMode, Product, SaleRecord, SessionSummary } from "@/types";
+import type { CartItem, CostRecord, CostUnitPriceMode, Product, SaleRecord, SessionSummary } from "@/types";
+
+const skewerCategoryId = "cat-skewer";
+
+// Total skewer count across the cart regardless of how they got there — a single product click
+// or bundled into a set (3本セット etc.) both count the same way toward this threshold. This is a
+// separate, additive discount from bundle pricing, not a replacement for it.
+function getSkewerCount(cartItems: CartItem[]): number {
+  return cartItems.reduce(
+    (sum, cartItem) =>
+      sum + cartItem.items.filter((item) => item.category === skewerCategoryId).reduce((itemSum, item) => itemSum + item.quantity, 0),
+    0
+  );
+}
+
+export function getSkewerAutoDiscount(cartItems: CartItem[]): number {
+  const count = getSkewerCount(cartItems);
+  if (count >= 5) return 100;
+  if (count >= 3) return 50;
+  return 0;
+}
 
 export const yen = (value: number) =>
   new Intl.NumberFormat("ja-JP", {

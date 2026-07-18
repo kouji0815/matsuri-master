@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { yen } from "@/lib/calculations";
+import { getSkewerAutoDiscount, yen } from "@/lib/calculations";
 import { playCheckoutSound } from "@/lib/sound";
 import { useAppStore } from "@/store/useAppStore";
 import type { PaymentMethod } from "@/types";
@@ -28,15 +28,17 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
   const [message, setMessage] = useState("");
 
   const subtotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.totalPrice, 0), [cartItems]);
-  const normalizedDiscount = Math.max(0, Math.min(Number(discountAmount || 0), subtotal));
-  const finalTotal = Math.max(0, subtotal - normalizedDiscount);
+  const skewerAutoDiscount = useMemo(() => getSkewerAutoDiscount(cartItems), [cartItems]);
+  const manualDiscount = Math.max(0, Number(discountAmount || 0));
+  const totalDiscount = Math.min(skewerAutoDiscount + manualDiscount, subtotal);
+  const finalTotal = Math.max(0, subtotal - totalDiscount);
   const receivedAmountNumber = Number(receivedAmount || 0);
   const changeAmount = paymentMethod === "cash" ? Math.max(0, receivedAmountNumber - finalTotal) : 0;
 
   const confirm = async () => {
     const result = await checkoutCart({
       paymentMethod,
-      discountAmount: normalizedDiscount,
+      discountAmount: totalDiscount,
       discountReason,
       receivedAmount: paymentMethod === "cash" ? receivedAmountNumber : finalTotal
     });
@@ -83,6 +85,12 @@ export default function CheckoutModal({ onClose, onCompleted }: Props) {
         <aside className="rounded-lg border border-line bg-panel p-4">
           <div className="space-y-3">
             <SummaryLine label="小計" value={yen(subtotal)} />
+            {skewerAutoDiscount > 0 && (
+              <div className="flex items-center justify-between gap-3 rounded-md bg-mint/15 px-3 py-2 text-sm font-bold text-emerald-700">
+                <span>串セット割引</span>
+                <span>-{yen(skewerAutoDiscount)}</span>
+              </div>
+            )}
             <label className="block text-sm font-bold text-slate-600">
               割引金額
               <input
