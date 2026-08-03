@@ -64,6 +64,11 @@ export default function BusinessSummary() {
 
   const costTotal = allCosts.reduce((sum, cost) => sum + cost.amount, 0);
   const saleSummary = useMemo(() => getSaleSummary(allSales, []), [allSales]);
+  // Expenses aren't double-tracked in this app's usage: everything that would normally be a
+  // per-product cost is instead logged as a コスト record, so 総収益 is revenue minus every cost
+  // record ever entered — not revenue minus the (separately, lightly maintained) per-product
+  // unitCost field. The 商品原価一覧 below is kept only as per-product reference data.
+  const totalProfit = saleSummary.revenue - costTotal;
 
   return (
     <div className="space-y-4">
@@ -74,9 +79,9 @@ export default function BusinessSummary() {
 
       <div className="rounded-lg border-2 border-mint bg-mint/10 p-6 text-center">
         <div className="text-sm font-bold text-slate-600">総収益（全期間粗利益）</div>
-        <div className="mt-2 text-4xl font-black text-slate-950 md:text-6xl">{loading ? "計算中..." : yen(saleSummary.grossProfit)}</div>
+        <div className="mt-2 text-4xl font-black text-slate-950 md:text-6xl">{loading ? "計算中..." : yen(totalProfit)}</div>
         <p className="mt-2 text-xs text-slate-500">
-          売上合計 {yen(saleSummary.revenue)} − 商品原価合計 {yen(saleSummary.variableCost)}（その他コスト・固定費は含みません）
+          売上合計 {yen(saleSummary.revenue)} − 全コスト合計 {yen(costTotal)}
         </p>
       </div>
 
@@ -84,6 +89,7 @@ export default function BusinessSummary() {
         <section className="rounded-lg border border-line bg-panel p-4">
           <h3 className="text-xl font-black text-slate-950">全商品の原価一覧</h3>
           <p className="mt-1 text-sm text-slate-500">現在有効な商品 {activeProducts.length}品</p>
+          <p className="mt-1 text-xs text-slate-400">※参考情報です。上部の「総収益」の計算には使用していません（支出はコスト管理の記録で一括集計しています）。</p>
           <div className="mt-3 max-h-[480px] space-y-2 overflow-y-auto">
             {activeProducts.map((product) => {
               const costRate = product.price > 0 ? (product.unitCost / product.price) * 100 : 0;
