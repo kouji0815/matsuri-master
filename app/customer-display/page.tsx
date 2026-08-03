@@ -195,46 +195,114 @@ function ConnectionDot({ state }: { state: ConnectionState }) {
   return <span title={label} className={`h-3 w-3 rounded-full ${color}`} />;
 }
 
+type ScreenState = "idle" | "starting" | "scanning" | "success" | "camera-error";
+
+// A workspaceId is always generated as `workspace-${crypto.randomUUID()}` (see SettingsPanel.tsx)
+// — a lightweight shape check here is enough to tell "wrong/garbage QR code" apart from "camera
+// briefly saw noise", without being so strict that a future id format change breaks scanning.
+const workspaceIdPattern = /^workspace-[a-zA-Z0-9-]{8,}$/;
+
 function PairingScreen({ onScanSuccess }: { onScanSuccess: (text: string) => void }) {
   const onScanSuccessRef = useRef(onScanSuccess);
   onScanSuccessRef.current = onScanSuccess;
-  const [error, setError] = useState("");
+  const scannerRef = useRef<InstanceType<typeof import("html5-qrcode").Html5Qrcode> | null>(null);
+  const invalidQrTimerRef = useRef<number | null>(null);
+  const [screenState, setScreenState] = useState<ScreenState>("idle");
+  const [invalidQrMessage, setInvalidQrMessage] = useState("");
+
+  const stopScanner = useCallback(async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (!scanner) return;
+    try {
+      if (scanner.isScanning) await scanner.stop();
+      scanner.clear();
+    } catch {
+      // ignore: best-effort cleanup, the camera stream is being torn down regardless
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    let scanner: InstanceType<typeof import("html5-qrcode").Html5QrcodeScanner> | null = null;
-
-    import("html5-qrcode")
-      .then(({ Html5QrcodeScanner }) => {
-        if (cancelled) return;
-        scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: 240 }, false);
-        scanner.render(
-          (decodedText: string) => {
-            onScanSuccessRef.current(decodedText);
-            void scanner?.clear().catch(() => undefined);
-          },
-          () => {
-            // per-frame scan miss while no QR code is in view — expected, not an error
-          }
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setError("カメラを起動できませんでした。カメラの使用を許可してください。");
-      });
-
     return () => {
-      cancelled = true;
-      void scanner?.clear().catch(() => undefined);
+      void stopScanner();
+      if (invalidQrTimerRef.current) window.clearTimeout(invalidQrTimerRef.current);
     };
-  }, []);
+  }, [stopScanner]);
+
+  // Uses the low-level Html5Qrcode class (not Html5QrcodeScanner) so pressing "スキャン" goes
+  // straight into an active back-camera feed — no library-drawn "Request Camera Permissions" /
+  // "Scan an Image File" buttons in between. The only unavoidable interruption is the browser's
+  // own native camera-permission prompt.
+  const startScanning = async () => {
+    setScreenState("starting");
+    try {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const scanner = new Html5Qrcode("qr-reader");
+      scannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 240 },
+        (decodedText: string) => {
+          const trimmed = decodedText.trim();
+          if (!workspaceIdPattern.test(trimmed)) {
+            if (invalidQrTimerRef.current) window.clearTimeout(invalidQrTimerRef.current);
+            setInvalidQrMessage("無効なQRコードです。レジ用iPadの正しいQRコードを読み取ってください。");
+            invalidQrTimerRef.current = window.setTimeout(() => setInvalidQrMessage(""), 3000);
+            return;
+          }
+          setScreenState("success");
+          void stopScanner();
+          window.setTimeout(() => onScanSuccessRef.current(trimmed), 900);
+        },
+        () => {
+          // per-frame scan miss while no QR code is in view — expected, not an error
+        }
+      );
+      setScreenState("scanning");
+    } catch {
+      setScreenState("camera-error");
+    }
+  };
 
   return (
     <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-white">
       <div className="w-full max-w-md text-center">
-        <h1 className="text-3xl font-black md:text-4xl">QRコードをスキャンして接続</h1>
-        <p className="mt-2 text-slate-300">レジ端末の「設定」画面に表示されているQRコードを読み取ってください。</p>
-        <div id="qr-reader" className="mt-6 overflow-hidden rounded-xl" />
-        {error && <p className="mt-4 font-bold text-danger">{error}</p>}
+        <h1 className="text-3xl font-black md:text-4xl">客用ディスプレイ</h1>
+
+        {screenState === "idle" && (
+          <>
+            <p className="mt-3 text-slate-300">レジ用iPadとペアリングして、お会計内容をリアルタイムに表示します。</p>
+            <button
+              onClick={() => void startScanning()}
+              className="mt-8 min-h-16 w-full rounded-lg bg-mint px-8 text-xl font-black text-slate-950 active:scale-95"
+            >
+              スキャン
+            </button>
+          </>
+        )}
+
+        {screenState === "starting" && <p className="mt-8 text-lg text-slate-300">カメラを起動しています...</p>}
+
+        {(screenState === "scanning" || screenState === "success") && (
+          <>
+            <p className="mt-3 text-slate-300">レジ用iPadの設定画面に表示されているQRコードを映してください。</p>
+            <div id="qr-reader" className="mx-auto mt-6 overflow-hidden rounded-xl" />
+            {invalidQrMessage && <p className="mt-4 font-bold text-danger">{invalidQrMessage}</p>}
+            {screenState === "success" && <div className="mt-4 rounded-lg bg-mint/20 p-4 text-xl font-black text-mint">接続しました</div>}
+          </>
+        )}
+
+        {screenState === "camera-error" && (
+          <>
+            <p className="mt-8 font-bold text-danger">カメラを起動できませんでした。カメラの使用を許可してから、もう一度お試しください。</p>
+            <button
+              onClick={() => void startScanning()}
+              className="mt-6 min-h-14 w-full rounded-lg bg-mint px-8 font-black text-slate-950 active:scale-95"
+            >
+              再試行
+            </button>
+          </>
+        )}
       </div>
     </main>
   );

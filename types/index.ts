@@ -1,4 +1,4 @@
-export type AppMode = "today" | "menu" | "cost" | "review" | "data" | "settings";
+export type AppMode = "today" | "menu" | "cost" | "review" | "summary" | "data" | "settings";
 
 export type SessionStatus = "planned" | "open" | "closed";
 

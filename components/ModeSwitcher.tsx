@@ -8,6 +8,7 @@ const modes: { id: AppMode; label: string }[] = [
   { id: "menu", label: "メニュー・在庫" },
   { id: "cost", label: "コスト管理" },
   { id: "review", label: "振り返り" },
+  { id: "summary", label: "経営サマリー" },
   { id: "data", label: "データ管理" },
   { id: "settings", label: "設定" }
 ];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import BusinessSummary from "@/components/BusinessSummary";
 import CostManager from "@/components/CostManager";
 import Dashboard from "@/components/Dashboard";
 import DataManager from "@/components/DataManager";
@@ -67,6 +68,7 @@ export default function Home() {
         {mode === "menu" && <ProductManager />}
         {mode === "cost" && <CostManager />}
         {mode === "review" && <ReviewDashboard />}
+        {mode === "summary" && <BusinessSummary />}
         {mode === "data" && <DataManager />}
         {mode === "settings" && <SettingsPanel />}
       </div>
