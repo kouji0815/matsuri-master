@@ -63,11 +63,7 @@ export function pairingChannelName(pin: string) {
   return `pairing:${pin}`;
 }
 
-// Cashier side: opens a channel for this PIN and answers any "request-workspace" broadcast with
-// this device's workspaceId. Callers own the returned channel's lifetime — call
-// closePairingChannel when the PIN is regenerated or the settings screen unmounts, so a stale PIN
-// stops being answerable (that's what makes it "expire").
-export function hostPairingChannel(pin: string, workspaceId: string): RealtimeChannel | null {
+function hostPairingChannel(pin: string, workspaceId: string): RealtimeChannel | null {
   const client = getSupabaseClient();
   if (!client) return null;
   const channel = client.channel(pairingChannelName(pin));
@@ -78,13 +74,45 @@ export function hostPairingChannel(pin: string, workspaceId: string): RealtimeCh
   return channel;
 }
 
-export function closePairingChannel(channel: RealtimeChannel | null) {
+function closePairingChannel(channel: RealtimeChannel | null) {
   if (!channel) return;
   try {
     getSupabaseClient()?.removeChannel(channel);
   } catch {
     // ignore: best-effort cleanup
   }
+}
+
+const PIN_LIFETIME_MS = 5 * 60 * 1000;
+
+function generatePin() {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+}
+
+type PairingSession = { pin: string; workspaceId: string; expiresAt: number; channel: RealtimeChannel | null };
+let currentPairing: PairingSession | null = null;
+
+// Kept at module scope (not component state) so the PIN survives SettingsPanel unmounting when
+// the cashier just navigates to another tab of the app — without this, every visit to the
+// settings screen would silently mint a brand-new PIN and invalidate whatever the customer
+// display was shown moments ago, making the 5-minute expiry meaningless in normal use.
+export function getOrCreatePairingPin(workspaceId: string): { pin: string; expiresAt: number } {
+  const now = Date.now();
+  if (currentPairing && currentPairing.workspaceId === workspaceId && currentPairing.expiresAt > now) {
+    return { pin: currentPairing.pin, expiresAt: currentPairing.expiresAt };
+  }
+  if (currentPairing) closePairingChannel(currentPairing.channel);
+  const pin = generatePin();
+  const expiresAt = now + PIN_LIFETIME_MS;
+  const channel = hostPairingChannel(pin, workspaceId);
+  currentPairing = { pin, workspaceId, expiresAt, channel };
+  return { pin, expiresAt };
+}
+
+export function regeneratePairingPin(workspaceId: string): { pin: string; expiresAt: number } {
+  if (currentPairing) closePairingChannel(currentPairing.channel);
+  currentPairing = null;
+  return getOrCreatePairingPin(workspaceId);
 }
 
 // Customer-display side: asks whoever is hosting this PIN's channel for the workspaceId. Rejects

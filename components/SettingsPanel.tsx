@@ -1,16 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { closePairingChannel, hostPairingChannel } from "@/lib/customerDisplaySync";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getOrCreatePairingPin, regeneratePairingPin } from "@/lib/customerDisplaySync";
 import { getSupabasePublicEnvStatus } from "@/lib/supabaseClient";
 import { useAppStore } from "@/store/useAppStore";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-
-const PIN_LIFETIME_MS = 5 * 60 * 1000;
-
-function generatePin() {
-  return String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-}
 
 export default function SettingsPanel() {
   const { settings, syncOverview, updateSettings, resetAllData } = useAppStore();
@@ -29,20 +22,21 @@ export default function SettingsPanel() {
 
   const [pairingPin, setPairingPin] = useState("");
   const [pinExpiresAt, setPinExpiresAt] = useState(0);
-  const pairingChannelRef = useRef<RealtimeChannel | null>(null);
 
-  const issuePin = useCallback(() => {
-    closePairingChannel(pairingChannelRef.current);
-    const pin = generatePin();
-    pairingChannelRef.current = hostPairingChannel(pin, settings.workspaceId);
+  // Reuses the in-flight PIN if one is still valid for this workspace (see
+  // lib/customerDisplaySync.ts) so simply navigating away from and back to this screen doesn't
+  // mint a fresh PIN and strand whatever a customer display was just shown.
+  useEffect(() => {
+    const { pin, expiresAt } = getOrCreatePairingPin(settings.workspaceId);
     setPairingPin(pin);
-    setPinExpiresAt(Date.now() + PIN_LIFETIME_MS);
+    setPinExpiresAt(expiresAt);
   }, [settings.workspaceId]);
 
-  useEffect(() => {
-    issuePin();
-    return () => closePairingChannel(pairingChannelRef.current);
-  }, [issuePin]);
+  const issuePin = useCallback(() => {
+    const { pin, expiresAt } = regeneratePairingPin(settings.workspaceId);
+    setPairingPin(pin);
+    setPinExpiresAt(expiresAt);
+  }, [settings.workspaceId]);
 
   useEffect(() => {
     if (!pinExpiresAt) return;
