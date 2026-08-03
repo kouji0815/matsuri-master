@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { closePairingChannel, hostPairingChannel } from "@/lib/customerDisplaySync";
 import { getSupabasePublicEnvStatus } from "@/lib/supabaseClient";
 import { useAppStore } from "@/store/useAppStore";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+
+const PIN_LIFETIME_MS = 5 * 60 * 1000;
+
+function generatePin() {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+}
 
 export default function SettingsPanel() {
   const { settings, syncOverview, updateSettings, resetAllData } = useAppStore();
@@ -19,21 +26,30 @@ export default function SettingsPanel() {
   }, [settings.defaultTargetSales, settings.workspaceId, settings.meatUnitPriceBaseGrams]);
 
   const supabaseEnvStatus = useMemo(() => getSupabasePublicEnvStatus(), []);
-  const [pairingQrDataUrl, setPairingQrDataUrl] = useState("");
+
+  const [pairingPin, setPairingPin] = useState("");
+  const [pinExpiresAt, setPinExpiresAt] = useState(0);
+  const pairingChannelRef = useRef<RealtimeChannel | null>(null);
+
+  const issuePin = useCallback(() => {
+    closePairingChannel(pairingChannelRef.current);
+    const pin = generatePin();
+    pairingChannelRef.current = hostPairingChannel(pin, settings.workspaceId);
+    setPairingPin(pin);
+    setPinExpiresAt(Date.now() + PIN_LIFETIME_MS);
+  }, [settings.workspaceId]);
 
   useEffect(() => {
-    let cancelled = false;
-    QRCode.toDataURL(settings.workspaceId, { margin: 1, width: 240 })
-      .then((dataUrl) => {
-        if (!cancelled) setPairingQrDataUrl(dataUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setPairingQrDataUrl("");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [settings.workspaceId]);
+    issuePin();
+    return () => closePairingChannel(pairingChannelRef.current);
+  }, [issuePin]);
+
+  useEffect(() => {
+    if (!pinExpiresAt) return;
+    const remaining = pinExpiresAt - Date.now();
+    const timer = window.setTimeout(issuePin, Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [pinExpiresAt, issuePin]);
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
@@ -130,13 +146,13 @@ export default function SettingsPanel() {
 
         <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="text-lg font-black text-gray-900">顧客ディスプレイ</h3>
-          <p className="mt-1 text-sm text-gray-500">客用 iPad でこのQRコードをスキャンしてください。</p>
-          <div className="mt-3 flex flex-col items-center gap-3 rounded-lg border border-gray-200 bg-panel p-4">
-            {pairingQrDataUrl ? (
-              <img src={pairingQrDataUrl} alt="顧客ディスプレイ ペアリング用QRコード" className="h-48 w-48 rounded-md bg-white p-2" />
-            ) : (
-              <div className="grid h-48 w-48 place-items-center rounded-md bg-white text-sm text-slate-500">QRコード生成中...</div>
-            )}
+          <p className="mt-1 text-sm text-gray-500">客用 iPad の「接続する」から、このPINコードを入力してください。</p>
+          <div className="mt-3 flex flex-col items-center gap-3 rounded-lg border border-gray-200 bg-panel p-6">
+            <div className="text-5xl font-black tracking-[0.3em] text-slate-950">{pairingPin || "----"}</div>
+            <PinCountdown expiresAt={pinExpiresAt} />
+            <button onClick={issuePin} className="rounded-md bg-slate-700 px-4 py-2 text-sm font-bold text-white">
+              新しいPINを発行
+            </button>
           </div>
         </div>
 
@@ -161,6 +177,25 @@ export default function SettingsPanel() {
         </div>
       </div>
     </section>
+  );
+}
+
+function PinCountdown({ expiresAt }: { expiresAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const remainingSeconds = Math.max(0, Math.ceil((expiresAt - now) / 1000));
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+
+  return (
+    <p className="text-xs text-slate-500">
+      有効期限まで残り {minutes}:{String(seconds).padStart(2, "0")}（自動的に新しいPINに更新されます）
+    </p>
   );
 }
 

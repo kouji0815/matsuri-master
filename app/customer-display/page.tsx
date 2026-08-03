@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { customerDisplayChannelName, loadCustomerDisplay } from "@/lib/customerDisplay";
-import { customerDisplayChannel } from "@/lib/customerDisplaySync";
+import { customerDisplayChannel, requestWorkspaceViaPin } from "@/lib/customerDisplaySync";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { yen } from "@/lib/calculations";
 import type { CurrentCheckoutDisplay, PaymentMethod } from "@/types";
@@ -92,8 +92,8 @@ export default function CustomerDisplayPage() {
     };
   }, [workspaceId, applyDisplay]);
 
-  const handleScanSuccess = useCallback((scannedText: string) => {
-    const trimmed = scannedText.trim();
+  const handlePairSuccess = useCallback((pairedWorkspaceId: string) => {
+    const trimmed = pairedWorkspaceId.trim();
     if (!trimmed) return;
     localStorage.setItem(pairedWorkspaceStorageKey, trimmed);
     setWorkspaceId(trimmed);
@@ -108,7 +108,7 @@ export default function CustomerDisplayPage() {
   if (!pairingChecked) return null;
 
   if (!workspaceId) {
-    return <PairingScreen onScanSuccess={handleScanSuccess} />;
+    return <PinEntryScreen onPairSuccess={handlePairSuccess} />;
   }
 
   return (
@@ -195,73 +195,42 @@ function ConnectionDot({ state }: { state: ConnectionState }) {
   return <span title={label} className={`h-3 w-3 rounded-full ${color}`} />;
 }
 
-type ScreenState = "idle" | "starting" | "scanning" | "success" | "camera-error";
+type ScreenState = "idle" | "entering" | "connecting" | "success" | "error";
 
-// A workspaceId is always generated as `workspace-${crypto.randomUUID()}` (see SettingsPanel.tsx)
-// — a lightweight shape check here is enough to tell "wrong/garbage QR code" apart from "camera
-// briefly saw noise", without being so strict that a future id format change breaks scanning.
-const workspaceIdPattern = /^workspace-[a-zA-Z0-9-]{8,}$/;
-
-function PairingScreen({ onScanSuccess }: { onScanSuccess: (text: string) => void }) {
-  const onScanSuccessRef = useRef(onScanSuccess);
-  onScanSuccessRef.current = onScanSuccess;
-  const scannerRef = useRef<InstanceType<typeof import("html5-qrcode").Html5Qrcode> | null>(null);
-  const invalidQrTimerRef = useRef<number | null>(null);
+function PinEntryScreen({ onPairSuccess }: { onPairSuccess: (workspaceId: string) => void }) {
+  const onPairSuccessRef = useRef(onPairSuccess);
+  onPairSuccessRef.current = onPairSuccess;
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [screenState, setScreenState] = useState<ScreenState>("idle");
-  const [invalidQrMessage, setInvalidQrMessage] = useState("");
-
-  const stopScanner = useCallback(async () => {
-    const scanner = scannerRef.current;
-    scannerRef.current = null;
-    if (!scanner) return;
-    try {
-      if (scanner.isScanning) await scanner.stop();
-      scanner.clear();
-    } catch {
-      // ignore: best-effort cleanup, the camera stream is being torn down regardless
-    }
-  }, []);
+  const [pin, setPin] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    return () => {
-      void stopScanner();
-      if (invalidQrTimerRef.current) window.clearTimeout(invalidQrTimerRef.current);
-    };
-  }, [stopScanner]);
+    if (screenState === "entering") inputRef.current?.focus();
+  }, [screenState]);
 
-  // Uses the low-level Html5Qrcode class (not Html5QrcodeScanner) so pressing "スキャン" goes
-  // straight into an active back-camera feed — no library-drawn "Request Camera Permissions" /
-  // "Scan an Image File" buttons in between. The only unavoidable interruption is the browser's
-  // own native camera-permission prompt.
-  const startScanning = async () => {
-    setScreenState("starting");
+  const submitPin = async (candidate: string) => {
+    setScreenState("connecting");
+    setErrorMessage("");
     try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode("qr-reader");
-      scannerRef.current = scanner;
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 240 },
-        (decodedText: string) => {
-          const trimmed = decodedText.trim();
-          if (!workspaceIdPattern.test(trimmed)) {
-            if (invalidQrTimerRef.current) window.clearTimeout(invalidQrTimerRef.current);
-            setInvalidQrMessage("無効なQRコードです。レジ用iPadの正しいQRコードを読み取ってください。");
-            invalidQrTimerRef.current = window.setTimeout(() => setInvalidQrMessage(""), 3000);
-            return;
-          }
-          setScreenState("success");
-          void stopScanner();
-          window.setTimeout(() => onScanSuccessRef.current(trimmed), 900);
-        },
-        () => {
-          // per-frame scan miss while no QR code is in view — expected, not an error
-        }
-      );
-      setScreenState("scanning");
+      const workspaceId = await requestWorkspaceViaPin(candidate);
+      setScreenState("success");
+      window.setTimeout(() => onPairSuccessRef.current(workspaceId), 900);
     } catch {
-      setScreenState("camera-error");
+      setScreenState("error");
+      setErrorMessage("接続できませんでした。PINが正しいか、期限切れでないかご確認のうえ、レジ用iPadの最新のPINをもう一度入力してください。");
     }
+  };
+
+  const handlePinChange = (raw: string) => {
+    const digitsOnly = raw.replace(/\D/g, "").slice(0, 4);
+    setPin(digitsOnly);
+    if (digitsOnly.length === 4) void submitPin(digitsOnly);
+  };
+
+  const retry = () => {
+    setPin("");
+    setScreenState("entering");
   };
 
   return (
@@ -273,33 +242,40 @@ function PairingScreen({ onScanSuccess }: { onScanSuccess: (text: string) => voi
           <>
             <p className="mt-3 text-slate-300">レジ用iPadとペアリングして、お会計内容をリアルタイムに表示します。</p>
             <button
-              onClick={() => void startScanning()}
+              onClick={() => setScreenState("entering")}
               className="mt-8 min-h-16 w-full rounded-lg bg-mint px-8 text-xl font-black text-slate-950 active:scale-95"
             >
-              スキャン
+              接続する
             </button>
           </>
         )}
 
-        {screenState === "starting" && <p className="mt-8 text-lg text-slate-300">カメラを起動しています...</p>}
-
-        {(screenState === "scanning" || screenState === "success") && (
+        {(screenState === "entering" || screenState === "connecting") && (
           <>
-            <p className="mt-3 text-slate-300">レジ用iPadの設定画面に表示されているQRコードを映してください。</p>
-            <div id="qr-reader" className="mx-auto mt-6 overflow-hidden rounded-xl" />
-            {invalidQrMessage && <p className="mt-4 font-bold text-danger">{invalidQrMessage}</p>}
-            {screenState === "success" && <div className="mt-4 rounded-lg bg-mint/20 p-4 text-xl font-black text-mint">接続しました</div>}
+            <p className="mt-3 text-slate-300">レジ用iPadの設定画面に表示されている4桁のPINコードを入力してください。</p>
+            <input
+              ref={inputRef}
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              value={pin}
+              onChange={(event) => handlePinChange(event.target.value)}
+              disabled={screenState === "connecting"}
+              placeholder="----"
+              className="mt-6 w-full rounded-lg border border-slate-700 bg-white p-4 text-center text-4xl font-black tracking-[0.4em] text-slate-950 disabled:bg-slate-200"
+            />
+            {screenState === "connecting" && <p className="mt-4 text-slate-300">接続を確認しています...</p>}
           </>
         )}
 
-        {screenState === "camera-error" && (
+        {screenState === "success" && <div className="mt-8 rounded-lg bg-mint/20 p-6 text-2xl font-black text-mint">接続しました</div>}
+
+        {screenState === "error" && (
           <>
-            <p className="mt-8 font-bold text-danger">カメラを起動できませんでした。カメラの使用を許可してから、もう一度お試しください。</p>
-            <button
-              onClick={() => void startScanning()}
-              className="mt-6 min-h-14 w-full rounded-lg bg-mint px-8 font-black text-slate-950 active:scale-95"
-            >
-              再試行
+            <p className="mt-8 font-bold text-danger">{errorMessage}</p>
+            <button onClick={retry} className="mt-6 min-h-14 w-full rounded-lg bg-mint px-8 font-black text-slate-950 active:scale-95">
+              もう一度入力する
             </button>
           </>
         )}
