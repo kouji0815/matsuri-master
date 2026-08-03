@@ -8,6 +8,8 @@ import type { CostCategory, CostRecord, CostType, CostUnitPriceMode } from "@/ty
 
 const UNASSIGNED_SESSION_VALUE = "__unassigned__";
 
+type CostViewMode = "session" | "unassigned" | "allTime";
+
 const typeLabels: Record<CostType, string> = {
   fixed: "固定費",
   purchase: "仕入れ",
@@ -79,16 +81,24 @@ export default function CostManager() {
   const [amountText, setAmountText] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [costModalOpen, setCostModalOpen] = useState(false);
-  const [viewingUnassigned, setViewingUnassigned] = useState(false);
+  const [viewMode, setViewMode] = useState<CostViewMode>("session");
   const [unassignedCosts, setUnassignedCosts] = useState<CostRecord[]>([]);
+  const [allTimeCosts, setAllTimeCosts] = useState<CostRecord[]>([]);
+  const viewingUnassigned = viewMode === "unassigned";
+  const viewingAllTime = viewMode === "allTime";
 
   const loadUnassignedCosts = useCallback(async () => {
     const rows = await db.costs.filter((cost) => !cost.sessionId && cost.workspaceId === settings.workspaceId && !cost.deletedAt).toArray();
     setUnassignedCosts(rows.sort((a, b) => b.amount - a.amount));
   }, [settings.workspaceId]);
 
-  const activeSessionId = viewingUnassigned ? undefined : selectedSession?.id;
-  const displayedCosts = viewingUnassigned ? unassignedCosts : costs;
+  const loadAllTimeCosts = useCallback(async () => {
+    const rows = await db.costs.filter((cost) => cost.workspaceId === settings.workspaceId && !cost.deletedAt).toArray();
+    setAllTimeCosts(rows.sort((a, b) => b.amount - a.amount));
+  }, [settings.workspaceId]);
+
+  const activeSessionId = viewMode === "session" ? selectedSession?.id : undefined;
+  const displayedCosts = viewingUnassigned ? unassignedCosts : viewingAllTime ? allTimeCosts : costs;
 
   useEffect(() => {
     setEditing((current) => ({ ...current, sessionId: activeSessionId, costCategoryId: current.costCategoryId || firstCategoryId }));
@@ -124,13 +134,22 @@ export default function CostManager() {
   const isNewCost = !displayedCosts.some((cost) => cost.id === editing.id);
 
   const selectRealSession = (sessionId: string) => {
-    setViewingUnassigned(false);
+    setViewMode("session");
     void selectSession(sessionId);
   };
 
   const selectUnassignedView = () => {
-    setViewingUnassigned(true);
+    setViewMode("unassigned");
     void loadUnassignedCosts();
+  };
+
+  const toggleAllTimeView = () => {
+    if (viewingAllTime) {
+      setViewMode("session");
+      return;
+    }
+    setViewMode("allTime");
+    void loadAllTimeCosts();
   };
 
   const openNewCost = () => {
@@ -154,6 +173,7 @@ export default function CostManager() {
       amount: Number(amountText || 0)
     });
     if (viewingUnassigned) await loadUnassignedCosts();
+    if (viewingAllTime) await loadAllTimeCosts();
     setEditing(blankCost(activeSessionId));
     setAmountText("");
     setCostModalOpen(false);
@@ -195,30 +215,38 @@ export default function CostManager() {
         <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black text-gray-900">コスト一覧</h2>
+              <h2 className="text-2xl font-black text-gray-900">コスト一覧{viewingAllTime && <span className="text-amber-600">（全期間）</span>}</h2>
               {sessions.length > 0 ? (
-                <label className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-                  表示中の営業場次
-                  <select
-                    value={viewingUnassigned ? UNASSIGNED_SESSION_VALUE : (selectedSession?.id ?? "")}
-                    onChange={(event) => {
-                      if (event.target.value === UNASSIGNED_SESSION_VALUE) {
-                        selectUnassignedView();
-                      } else if (event.target.value) {
-                        selectRealSession(event.target.value);
-                      }
-                    }}
-                    className="rounded-md border border-gray-300 bg-white px-2 py-1 font-bold text-gray-900 focus:border-blue-500 focus:outline-none"
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                  <label className="flex items-center gap-2">
+                    表示中の営業場次
+                    <select
+                      value={viewingUnassigned ? UNASSIGNED_SESSION_VALUE : (selectedSession?.id ?? "")}
+                      onChange={(event) => {
+                        if (event.target.value === UNASSIGNED_SESSION_VALUE) {
+                          selectUnassignedView();
+                        } else if (event.target.value) {
+                          selectRealSession(event.target.value);
+                        }
+                      }}
+                      className="rounded-md border border-gray-300 bg-white px-2 py-1 font-bold text-gray-900 focus:border-blue-500 focus:outline-none"
+                    >
+                      {!selectedSession && !viewingUnassigned && <option value="">選択してください</option>}
+                      {sessions.map((session) => (
+                        <option key={session.id} value={session.id}>
+                          {session.name} / {session.date}
+                        </option>
+                      ))}
+                      <option value={UNASSIGNED_SESSION_VALUE}>未設定コスト</option>
+                    </select>
+                  </label>
+                  <button
+                    onClick={toggleAllTimeView}
+                    className={`min-h-9 rounded-md px-3 text-sm font-bold ${viewingAllTime ? "bg-mint text-slate-950" : "bg-gray-100 text-gray-700"}`}
                   >
-                    {!selectedSession && !viewingUnassigned && <option value="">選択してください</option>}
-                    {sessions.map((session) => (
-                      <option key={session.id} value={session.id}>
-                        {session.name} / {session.date}
-                      </option>
-                    ))}
-                    <option value={UNASSIGNED_SESSION_VALUE}>未設定コスト</option>
-                  </select>
-                </label>
+                    全期間表示
+                  </button>
+                </div>
               ) : (
                 <p className="text-sm text-gray-500">営業場次を選択してください</p>
               )}
@@ -261,6 +289,7 @@ export default function CostManager() {
                 onSaveUnitPrice={(mode, baseGrams) => {
                   void saveCost({ ...cost, unitPriceMode: mode, unitPriceBaseGrams: baseGrams }).then(() => {
                     if (viewingUnassigned) void loadUnassignedCosts();
+                    if (viewingAllTime) void loadAllTimeCosts();
                   });
                 }}
                 onEdit={() => openEditCost(cost)}
@@ -268,17 +297,20 @@ export default function CostManager() {
                   if (!confirm("このコストを削除しますか？")) return;
                   void deleteCost(cost.id).then(() => {
                     if (viewingUnassigned) void loadUnassignedCosts();
+                    if (viewingAllTime) void loadAllTimeCosts();
                   });
                 }}
               />
             ))}
             {filteredCosts.length === 0 && (
               <p className="text-gray-500">
-                {viewingUnassigned
-                  ? "営業場次が未設定のコストはまだありません。"
-                  : sessions.length > 1
-                    ? "表示中の営業場次にはコストがありません。上の切り替えから別の場次も確認できます。"
-                    : "表示できるコスト記録がありません。"}
+                {viewingAllTime
+                  ? "コスト記録がまだありません。"
+                  : viewingUnassigned
+                    ? "営業場次が未設定のコストはまだありません。"
+                    : sessions.length > 1
+                      ? "表示中の営業場次にはコストがありません。上の切り替えから別の場次も確認できます。"
+                      : "表示できるコスト記録がありません。"}
               </p>
             )}
           </div>
