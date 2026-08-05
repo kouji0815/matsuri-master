@@ -1,4 +1,4 @@
-import type { CartItem, CostRecord, CostUnitPriceMode, Product, SaleRecord, SessionSummary } from "@/types";
+import type { CartItem, CostRecord, CostUnitPriceMode, Product, SaleRecord, Session, SessionSummary } from "@/types";
 
 const skewerCategoryId = "cat-skewer";
 
@@ -60,6 +60,81 @@ export function getTopProducts(sales: SaleRecord[], limit = 3) {
     }
   }
   return [...map.values()].sort((a, b) => b.quantity - a.quantity).slice(0, limit);
+}
+
+export type ProductSalesStat = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  revenue: number;
+};
+
+// All-time per-product totals for 経営サマリー's ranking — deliberately not limited/sorted here
+// (unlike getTopProducts, which is the 本日の営業 dashboard's "top 3" widget) so the summary
+// screen can offer both a full list and either sort order without recomputing.
+export function getProductSalesStats(sales: SaleRecord[]): ProductSalesStat[] {
+  const map = new Map<string, ProductSalesStat>();
+  for (const sale of sales) {
+    for (const item of sale.items) {
+      const current = map.get(item.productId) ?? { productId: item.productId, productName: item.productName, quantity: 0, revenue: 0 };
+      current.quantity += item.quantity;
+      current.revenue += item.subtotal;
+      map.set(item.productId, current);
+    }
+  }
+  return [...map.values()];
+}
+
+export type SessionSalesStat = {
+  sessionId: string;
+  date: string;
+  name: string;
+  revenue: number;
+};
+
+// Groups by session (営業回), not by calendar day — a session already carries its own "date"
+// field, which is the unit 振り返り and the rest of the app treat as "a day's business", so this
+// stays consistent even if a session's sales cross a midnight boundary. Sessions no longer found
+// (e.g. a data edge case) fall back to the sale's own createdAt date so nothing silently vanishes.
+export function getSessionSalesStats(sales: SaleRecord[], sessions: Session[]): SessionSalesStat[] {
+  const sessionMap = new Map(sessions.map((session) => [session.id, session]));
+  const map = new Map<string, SessionSalesStat>();
+  for (const sale of sales) {
+    const session = sessionMap.get(sale.sessionId);
+    const date = session?.date ?? sale.createdAt.slice(0, 10);
+    const name = session?.name ?? "不明な営業回";
+    const current = map.get(sale.sessionId) ?? { sessionId: sale.sessionId, date, name, revenue: 0 };
+    current.revenue += sale.totalRevenue;
+    map.set(sale.sessionId, current);
+  }
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export type ProductDailyStat = {
+  sessionId: string;
+  date: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+};
+
+export function getProductDailyStats(sales: SaleRecord[], sessions: Session[], productId: string): ProductDailyStat[] {
+  const sessionMap = new Map(sessions.map((session) => [session.id, session]));
+  const map = new Map<string, ProductDailyStat>();
+  for (const sale of sales) {
+    const relevantItems = sale.items.filter((item) => item.productId === productId);
+    if (relevantItems.length === 0) continue;
+    const session = sessionMap.get(sale.sessionId);
+    const date = session?.date ?? sale.createdAt.slice(0, 10);
+    const name = session?.name ?? "不明な営業回";
+    const current = map.get(sale.sessionId) ?? { sessionId: sale.sessionId, date, name, quantity: 0, revenue: 0 };
+    for (const item of relevantItems) {
+      current.quantity += item.quantity;
+      current.revenue += item.subtotal;
+    }
+    map.set(sale.sessionId, current);
+  }
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function getHourlySales(sales: SaleRecord[]) {

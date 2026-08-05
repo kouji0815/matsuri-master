@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSaleSummary, yen } from "@/lib/calculations";
 import { db } from "@/lib/db";
+import ProductSalesInsights from "@/components/ProductSalesInsights";
 import { useAppStore } from "@/store/useAppStore";
-import type { CostRecord, SaleRecord } from "@/types";
+import type { CostRecord, Product, SaleRecord, Session } from "@/types";
 
 const chartColors = [
   "bg-orange-500",
@@ -24,6 +25,11 @@ export default function BusinessSummary() {
   const { products, costCategories, settings } = useAppStore();
   const [allCosts, setAllCosts] = useState<CostRecord[]>([]);
   const [allSales, setAllSales] = useState<SaleRecord[]>([]);
+  const [allSessions, setAllSessions] = useState<Session[]>([]);
+  // Includes disabled AND soft-deleted products too — unlike the store's `products`, which only
+  // holds currently-active ones — so past sales of a discontinued product can still show their
+  // icon and be labeled correctly in the ranking/detail views below.
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,11 +37,15 @@ export default function BusinessSummary() {
     setLoading(true);
     Promise.all([
       db.costs.filter((cost) => cost.workspaceId === settings.workspaceId && !cost.deletedAt).toArray(),
-      db.sales.filter((sale) => sale.workspaceId === settings.workspaceId && !sale.deletedAt).toArray()
-    ]).then(([costs, sales]) => {
+      db.sales.filter((sale) => sale.workspaceId === settings.workspaceId && !sale.deletedAt).toArray(),
+      db.sessions.filter((session) => session.workspaceId === settings.workspaceId && !session.deletedAt).toArray(),
+      db.products.filter((product) => product.workspaceId === settings.workspaceId).toArray()
+    ]).then(([costs, sales, sessions, products]) => {
       if (cancelled) return;
       setAllCosts(costs);
       setAllSales(sales);
+      setAllSessions(sessions);
+      setAllProducts(products);
       setLoading(false);
     });
     return () => {
@@ -138,6 +148,8 @@ export default function BusinessSummary() {
           </div>
         </section>
       </div>
+
+      <ProductSalesInsights sales={allSales} sessions={allSessions} allProducts={allProducts} />
     </div>
   );
 }
