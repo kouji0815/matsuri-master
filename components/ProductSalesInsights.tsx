@@ -32,12 +32,14 @@ export default function ProductSalesInsights({
 
   const productMap = useMemo(() => new Map(allProducts.map((product) => [product.id, product])), [allProducts]);
 
+  // Unfiltered by category — used for the 商品×日別詳細 tab's product picker, which is
+  // independent of the ranking tab's category filter below.
+  const allProductStats = useMemo(() => getProductSalesStats(sales).sort((a, b) => a.productName.localeCompare(b.productName, "ja")), [sales]);
+
   const rankingStats = useMemo(() => {
-    const stats = getProductSalesStats(sales).filter(
-      (stat) => !categoryFilter || productMap.get(stat.productId)?.category === categoryFilter
-    );
-    return stats.sort((a, b) => (sortKey === "revenue" ? b.revenue - a.revenue : b.quantity - a.quantity));
-  }, [sales, sortKey, categoryFilter, productMap]);
+    const stats = allProductStats.filter((stat) => !categoryFilter || productMap.get(stat.productId)?.category === categoryFilter);
+    return [...stats].sort((a, b) => (sortKey === "revenue" ? b.revenue - a.revenue : b.quantity - a.quantity));
+  }, [allProductStats, sortKey, categoryFilter, productMap]);
 
   const dailyStats = useMemo(() => getSessionSalesStats(sales, sessions), [sales, sessions]);
   const maxDailyRevenue = Math.max(1, ...dailyStats.map((stat) => stat.revenue));
@@ -193,7 +195,7 @@ export default function ProductSalesInsights({
               className="mt-1 w-full rounded-md border border-line bg-white p-3 text-slate-950"
             >
               <option value="">商品を選択してください</option>
-              {rankingStats.map((stat) => {
+              {allProductStats.map((stat) => {
                 const product = productMap.get(stat.productId);
                 const discontinued = isDiscontinued(product);
                 return (
