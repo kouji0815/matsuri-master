@@ -36,10 +36,23 @@ export default function ProductSalesInsights({
   // independent of the ranking tab's category filter below.
   const allProductStats = useMemo(() => getProductSalesStats(sales).sort((a, b) => a.productName.localeCompare(b.productName, "ja")), [sales]);
 
-  const rankingStats = useMemo(() => {
-    const stats = allProductStats.filter((stat) => !categoryFilter || productMap.get(stat.productId)?.category === categoryFilter);
-    return [...stats].sort((a, b) => (sortKey === "revenue" ? b.revenue - a.revenue : b.quantity - a.quantity));
-  }, [allProductStats, sortKey, categoryFilter, productMap]);
+  const rankingStatsUnsorted = useMemo(
+    () => allProductStats.filter((stat) => !categoryFilter || productMap.get(stat.productId)?.category === categoryFilter),
+    [allProductStats, categoryFilter, productMap]
+  );
+
+  const rankingStats = useMemo(
+    () => [...rankingStatsUnsorted].sort((a, b) => (sortKey === "revenue" ? b.revenue - a.revenue : b.quantity - a.quantity)),
+    [rankingStatsUnsorted, sortKey]
+  );
+
+  // Sum is order-independent, so this stays fixed across the 売上金額順／販売数順 toggle — it's
+  // derived from the pre-sort filtered set, not rankingStats, to make that independence explicit.
+  const categoryTotal = useMemo(
+    () => rankingStatsUnsorted.reduce((acc, stat) => ({ revenue: acc.revenue + stat.revenue, quantity: acc.quantity + stat.quantity }), { revenue: 0, quantity: 0 }),
+    [rankingStatsUnsorted]
+  );
+  const categoryTotalLabel = categoryFilter ? (categories.find((category) => category.id === categoryFilter)?.name ?? "選択中カテゴリ") : "すべて";
 
   const dailyStats = useMemo(() => getSessionSalesStats(sales, sessions), [sales, sessions]);
   const maxDailyRevenue = Math.max(1, ...dailyStats.map((stat) => stat.revenue));
@@ -103,6 +116,11 @@ export default function ProductSalesInsights({
                 {category.name}
               </SortButton>
             ))}
+          </div>
+          <div className="mt-3 rounded-md border border-gray-200 bg-white p-3">
+            <span className="font-bold text-gray-900">{categoryTotalLabel} 合計：</span>
+            <span className="font-black text-emerald-600">{yen(categoryTotal.revenue)}</span>
+            <span className="text-gray-600">（{categoryTotal.quantity}点）</span>
           </div>
           <div className="mt-3 max-h-[480px] space-y-2 overflow-y-auto">
             {rankingStats.map((stat, index) => {
