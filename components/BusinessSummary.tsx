@@ -22,7 +22,7 @@ const chartColors = [
 // it never scopes to db.sessions.selectedSession, so it queries db.costs / db.sales directly
 // instead of reading the store's session-scoped costs/sales state.
 export default function BusinessSummary() {
-  const { products, costCategories, settings } = useAppStore();
+  const { products, categories, costCategories, settings } = useAppStore();
   const [allCosts, setAllCosts] = useState<CostRecord[]>([]);
   const [allSales, setAllSales] = useState<SaleRecord[]>([]);
   const [allSessions, setAllSessions] = useState<Session[]>([]);
@@ -149,7 +149,7 @@ export default function BusinessSummary() {
         </section>
       </div>
 
-      <ProductSalesInsights sales={allSales} sessions={allSessions} allProducts={allProducts} />
+      <ProductSalesInsights sales={allSales} sessions={allSessions} allProducts={allProducts} categories={categories} />
     </div>
   );
 }

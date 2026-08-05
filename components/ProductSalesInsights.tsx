@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { getProductDailyStats, getProductSalesStats, getSessionSalesStats, yen } from "@/lib/calculations";
+import { getProductDailyStats, getProductSalesStats, getSessionProductStats, getSessionSalesStats, yen } from "@/lib/calculations";
 import { useAppStore } from "@/store/useAppStore";
-import type { Product, SaleRecord, Session } from "@/types";
+import type { Product, ProductCategory, SaleRecord, Session } from "@/types";
 
 type Tab = "ranking" | "daily" | "detail";
 type SortKey = "revenue" | "quantity";
@@ -12,21 +12,40 @@ function isDiscontinued(product: Product | undefined): boolean {
   return !product || !product.enabled || Boolean(product.deletedAt);
 }
 
-export default function ProductSalesInsights({ sales, sessions, allProducts }: { sales: SaleRecord[]; sessions: Session[]; allProducts: Product[] }) {
+export default function ProductSalesInsights({
+  sales,
+  sessions,
+  allProducts,
+  categories
+}: {
+  sales: SaleRecord[];
+  sessions: Session[];
+  allProducts: Product[];
+  categories: ProductCategory[];
+}) {
   const { setMode, selectSession } = useAppStore();
   const [tab, setTab] = useState<Tab>("ranking");
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [expandedSessionId, setExpandedSessionId] = useState("");
 
   const productMap = useMemo(() => new Map(allProducts.map((product) => [product.id, product])), [allProducts]);
 
   const rankingStats = useMemo(() => {
-    const stats = getProductSalesStats(sales);
+    const stats = getProductSalesStats(sales).filter(
+      (stat) => !categoryFilter || productMap.get(stat.productId)?.category === categoryFilter
+    );
     return stats.sort((a, b) => (sortKey === "revenue" ? b.revenue - a.revenue : b.quantity - a.quantity));
-  }, [sales, sortKey]);
+  }, [sales, sortKey, categoryFilter, productMap]);
 
   const dailyStats = useMemo(() => getSessionSalesStats(sales, sessions), [sales, sessions]);
   const maxDailyRevenue = Math.max(1, ...dailyStats.map((stat) => stat.revenue));
+
+  const expandedSessionStats = useMemo(
+    () => (expandedSessionId ? getSessionProductStats(sales, expandedSessionId) : []),
+    [sales, expandedSessionId]
+  );
 
   const detailStats = useMemo(
     () => (selectedProductId ? getProductDailyStats(sales, sessions, selectedProductId) : []),
@@ -36,6 +55,10 @@ export default function ProductSalesInsights({ sales, sessions, allProducts }: {
   const goToSession = (sessionId: string) => {
     void selectSession(sessionId);
     setMode("review");
+  };
+
+  const toggleSessionDetail = (sessionId: string) => {
+    setExpandedSessionId((current) => (current === sessionId ? "" : sessionId));
   };
 
   const viewProductDetail = (productId: string) => {
@@ -61,13 +84,23 @@ export default function ProductSalesInsights({ sales, sessions, allProducts }: {
 
       {tab === "ranking" && (
         <div className="mt-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <SortButton active={sortKey === "revenue"} onClick={() => setSortKey("revenue")}>
               売上金額順
             </SortButton>
             <SortButton active={sortKey === "quantity"} onClick={() => setSortKey("quantity")}>
               販売数順
             </SortButton>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <SortButton active={categoryFilter === ""} onClick={() => setCategoryFilter("")}>
+              すべて
+            </SortButton>
+            {categories.filter((category) => category.enabled).map((category) => (
+              <SortButton key={category.id} active={categoryFilter === category.id} onClick={() => setCategoryFilter(category.id)}>
+                {category.name}
+              </SortButton>
+            ))}
           </div>
           <div className="mt-3 max-h-[480px] space-y-2 overflow-y-auto">
             {rankingStats.map((stat, index) => {
@@ -94,26 +127,58 @@ export default function ProductSalesInsights({ sales, sessions, allProducts }: {
                 </div>
               );
             })}
-            {rankingStats.length === 0 && <p className="text-slate-500">売上データがありません。</p>}
+            {rankingStats.length === 0 && (
+              <p className="text-slate-500">{categoryFilter ? "このカテゴリの売上データがありません。" : "売上データがありません。"}</p>
+            )}
           </div>
         </div>
       )}
 
       {tab === "daily" && (
         <div className="mt-4 max-h-[480px] space-y-2 overflow-y-auto">
-          {dailyStats.map((stat) => (
-            <div key={stat.sessionId} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
-              <div className="flex items-center justify-between gap-3 text-sm text-gray-900">
-                <button onClick={() => goToSession(stat.sessionId)} className="text-left font-bold hover:underline">
-                  {stat.date} / {stat.name}
-                </button>
-                <strong>{yen(stat.revenue)}</strong>
+          {dailyStats.map((stat) => {
+            const expanded = expandedSessionId === stat.sessionId;
+            return (
+              <div key={stat.sessionId} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3 text-sm text-gray-900">
+                  <button onClick={() => goToSession(stat.sessionId)} className="text-left font-bold hover:underline">
+                    {stat.date} / {stat.name}
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <strong>{yen(stat.revenue)}</strong>
+                    <button
+                      onClick={() => toggleSessionDetail(stat.sessionId)}
+                      className="text-xs font-bold text-slate-600 underline decoration-dotted"
+                    >
+                      {expanded ? "閉じる" : "詳細"}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-1.5 h-2.5 rounded-full bg-gray-200">
+                  <div className="h-2.5 rounded-full bg-emerald-500" style={{ width: `${(stat.revenue / maxDailyRevenue) * 100}%` }} />
+                </div>
+                {expanded && (
+                  <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
+                    {expandedSessionStats.map((row) => {
+                      const product = productMap.get(row.productId);
+                      const discontinued = isDiscontinued(product);
+                      return (
+                        <div key={row.productId} className="flex items-center justify-between gap-3 text-sm text-gray-900">
+                          <span className="flex items-center gap-2">
+                            {product?.icon} {row.productName}
+                            {discontinued && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs font-bold text-gray-600">販売終了</span>}
+                            <span className="text-gray-500">{row.quantity}点</span>
+                          </span>
+                          <strong className="text-emerald-600">{yen(row.revenue)}</strong>
+                        </div>
+                      );
+                    })}
+                    {expandedSessionStats.length === 0 && <p className="text-sm text-slate-500">この日の販売実績がありません。</p>}
+                  </div>
+                )}
               </div>
-              <div className="mt-1.5 h-2.5 rounded-full bg-gray-200">
-                <div className="h-2.5 rounded-full bg-emerald-500" style={{ width: `${(stat.revenue / maxDailyRevenue) * 100}%` }} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {dailyStats.length === 0 && <p className="text-slate-500">売上データがありません。</p>}
         </div>
       )}

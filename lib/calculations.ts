@@ -137,6 +137,29 @@ export function getProductDailyStats(sales: SaleRecord[], sessions: Session[], p
   return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export type SessionProductStat = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  revenue: number;
+};
+
+// The inverse of getProductDailyStats: given one session (a day's business), how much of each
+// product sold that day — for the 日別売上推移 tab's per-row "詳細" breakdown.
+export function getSessionProductStats(sales: SaleRecord[], sessionId: string): SessionProductStat[] {
+  const map = new Map<string, SessionProductStat>();
+  for (const sale of sales) {
+    if (sale.sessionId !== sessionId) continue;
+    for (const item of sale.items) {
+      const current = map.get(item.productId) ?? { productId: item.productId, productName: item.productName, quantity: 0, revenue: 0 };
+      current.quantity += item.quantity;
+      current.revenue += item.subtotal;
+      map.set(item.productId, current);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+}
+
 export function getHourlySales(sales: SaleRecord[]) {
   const map = new Map<string, number>();
   for (const sale of sales) {
