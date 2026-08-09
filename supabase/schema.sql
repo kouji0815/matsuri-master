@@ -13,13 +13,15 @@ create table if not exists categories (
   name text not null,
   enabled boolean not null default true,
   sort_order integer not null default 0,
-  show_in_high_traffic boolean not null default false,
   sync_status text not null default 'pending',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
   cloud_synced_at timestamptz
 );
+
+-- ピークモード機能の廃止に伴う列削除（既存データベースに対しては安全に無視/削除される）
+alter table categories drop column if exists show_in_high_traffic;
 
 create table if not exists cost_categories (
   id text not null,
@@ -159,7 +161,6 @@ create table if not exists app_settings (
   id text not null,
   workspace_id text not null,
   device_id text not null,
-  high_traffic_mode boolean not null default false,
   sound_enabled boolean not null default true,
   default_target_sales numeric not null default 0,
   latest_backup_at timestamptz,
@@ -172,6 +173,9 @@ create table if not exists app_settings (
   deleted_at timestamptz,
   cloud_synced_at timestamptz
 );
+
+-- ピークモード機能の廃止に伴う列削除（既存データベースに対しては安全に無視/削除される）
+alter table app_settings drop column if exists high_traffic_mode;
 
 create table if not exists current_checkout_display (
   id text primary key,

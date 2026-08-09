@@ -50,15 +50,6 @@ export default function SettingsPanel() {
       <h2 className="text-2xl font-black text-slate-950">設定</h2>
       <div className="mt-4 space-y-4">
         <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 font-bold text-gray-900 shadow-sm">
-          ピークモード
-          <input
-            type="checkbox"
-            checked={settings.highTrafficMode}
-            onChange={(event) => void updateSettings({ ...settings, highTrafficMode: event.target.checked })}
-          />
-        </label>
-
-        <label className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-4 font-bold text-gray-900 shadow-sm">
           効果音
           <input type="checkbox" checked={settings.soundEnabled} onChange={(event) => void updateSettings({ ...settings, soundEnabled: event.target.checked })} />
         </label>

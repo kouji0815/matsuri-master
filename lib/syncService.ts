@@ -49,7 +49,7 @@ const tableConfigs: TableConfig[] = [
 // Entity-specific fields whose camelCase name differs from the Postgres column name.
 // Fields not listed here (e.g. "name", "price", "enabled") are assumed to share the same name.
 const entityFieldMaps: Record<LocalTable, Record<string, string>> = {
-  categories: { sortOrder: "sort_order", showInHighTraffic: "show_in_high_traffic" },
+  categories: { sortOrder: "sort_order" },
   costCategories: { sortOrder: "sort_order" },
   products: {
     unitCost: "unit_cost",
@@ -84,7 +84,6 @@ const entityFieldMaps: Record<LocalTable, Record<string, string>> = {
   costs: { sessionId: "session_id", costCategoryId: "cost_category_id" },
   stockAdjustments: { productId: "product_id", productName: "product_name" },
   settings: {
-    highTrafficMode: "high_traffic_mode",
     soundEnabled: "sound_enabled",
     defaultTargetSales: "default_target_sales",
     latestBackupAt: "latest_backup_at",
@@ -106,7 +105,7 @@ const entityFieldMaps: Record<LocalTable, Record<string, string>> = {
 // PostgREST bulk upserts can fail or silently misalign columns when rows in the same batch have
 // different key sets, so every optional field must still be present (as null) on every row.
 const entityFields: Record<LocalTable, string[]> = {
-  categories: ["name", "enabled", "sortOrder", "showInHighTraffic"],
+  categories: ["name", "enabled", "sortOrder"],
   costCategories: ["name", "enabled", "sortOrder"],
   products: ["name", "icon", "category", "price", "unitCost", "initialStock", "currentStock", "warningStock", "enabled", "sortOrder"],
   bundles: ["name", "price", "itemCount", "allowChoice", "includesDrink", "allowedCategoryIds", "discountAmount", "enabled"],
@@ -129,7 +128,7 @@ const entityFields: Record<LocalTable, string[]> = {
   ],
   costs: ["sessionId", "name", "amount", "type", "costCategoryId", "note", "date"],
   stockAdjustments: ["productId", "productName", "delta", "reason", "note"],
-  settings: ["highTrafficMode", "soundEnabled", "defaultTargetSales", "latestBackupAt", "cloudSyncEnabled", "lastSyncAt", "currentCheckoutDisplay"]
+  settings: ["soundEnabled", "defaultTargetSales", "latestBackupAt", "cloudSyncEnabled", "lastSyncAt", "currentCheckoutDisplay"]
 };
 
 const commonSnakeFields = ["id", "workspace_id", "device_id", "sync_status", "created_at", "updated_at", "deleted_at", "cloud_synced_at"];

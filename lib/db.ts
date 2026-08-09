@@ -186,6 +186,38 @@ class MatsuriDb extends Dexie {
       settings: "id, workspaceId, syncStatus, updatedAt",
       autoBackups: "id, createdAt"
     });
+    // v7: removes the ピークモード (high-traffic mode) feature. category.showInHighTraffic and
+    // settings.highTrafficMode are no longer read anywhere in the app, so this migration strips
+    // the stale fields from existing records rather than leaving them as dead data. Neither field
+    // was indexed, so the store definitions are unchanged from v6 — every other field on every
+    // other table is left untouched.
+    this.version(7)
+      .stores({
+        categories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+        costCategories: "id, workspaceId, syncStatus, sortOrder, deletedAt",
+        products: "id, workspaceId, category, enabled, syncStatus, deletedAt, sortOrder",
+        bundles: "id, workspaceId, enabled, syncStatus, deletedAt",
+        sessions: "id, workspaceId, date, status, syncStatus, deletedAt",
+        sales: "id, workspaceId, sessionId, createdAt, syncStatus, deletedAt",
+        costs: "id, workspaceId, sessionId, date, type, costCategoryId, syncStatus, deletedAt",
+        stockAdjustments: "id, workspaceId, productId, createdAt, syncStatus, deletedAt",
+        settings: "id, workspaceId, syncStatus, updatedAt",
+        autoBackups: "id, createdAt"
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table("categories")
+          .toCollection()
+          .modify((record) => {
+            delete record.showInHighTraffic;
+          });
+        await tx
+          .table("settings")
+          .toCollection()
+          .modify((record) => {
+            delete record.highTrafficMode;
+          });
+      });
   }
 }
 

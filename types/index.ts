@@ -24,7 +24,6 @@ export type ProductCategory = SyncableFields & {
   name: string;
   enabled: boolean;
   sortOrder: number;
-  showInHighTraffic: boolean;
   createdAt: string;
 };
 
@@ -174,7 +173,6 @@ export type StockAdjustment = SyncableFields & {
 export type AppSettings = SyncableFields & {
   id: "main";
   createdAt: string;
-  highTrafficMode: boolean;
   soundEnabled: boolean;
   defaultTargetSales: number;
   latestBackupAt?: string;

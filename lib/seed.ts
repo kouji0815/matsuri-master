@@ -14,10 +14,10 @@ function syncFields(): SyncableFields {
 }
 
 export const seedCategories: ProductCategory[] = [
-  { id: "cat-skewer", name: "くし", enabled: true, sortOrder: 10, showInHighTraffic: true, createdAt: now(), ...syncFields() },
-  { id: "cat-drink", name: "飲み物", enabled: true, sortOrder: 20, showInHighTraffic: true, createdAt: now(), ...syncFields() },
-  { id: "cat-toy", name: "おもちゃ", enabled: true, sortOrder: 30, showInHighTraffic: false, createdAt: now(), ...syncFields() },
-  { id: "cat-other", name: "その他", enabled: true, sortOrder: 40, showInHighTraffic: false, createdAt: now(), ...syncFields() }
+  { id: "cat-skewer", name: "くし", enabled: true, sortOrder: 10, createdAt: now(), ...syncFields() },
+  { id: "cat-drink", name: "飲み物", enabled: true, sortOrder: 20, createdAt: now(), ...syncFields() },
+  { id: "cat-toy", name: "おもちゃ", enabled: true, sortOrder: 30, createdAt: now(), ...syncFields() },
+  { id: "cat-other", name: "その他", enabled: true, sortOrder: 40, createdAt: now(), ...syncFields() }
 ];
 
 export const seedCostCategories: CostCategory[] = [
@@ -205,7 +205,6 @@ export const seedSession = (): Session => ({
 
 export const seedSettings: AppSettings = {
   id: "main",
-  highTrafficMode: false,
   soundEnabled: true,
   defaultTargetSales: 100000,
   cloudSyncEnabled: true,

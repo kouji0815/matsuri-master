@@ -92,7 +92,6 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 const baseSettings: AppSettings = {
   id: "main",
-  highTrafficMode: false,
   soundEnabled: true,
   defaultTargetSales: 100000,
   workspaceId: getOrCreateWorkspaceId(),

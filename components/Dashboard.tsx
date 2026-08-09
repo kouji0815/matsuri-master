@@ -95,7 +95,7 @@ export default function Dashboard() {
   const topProducts = useMemo(() => getTopProducts(sales), [sales]);
   const lowStock = useMemo(() => getLowStockProducts(products), [products]);
   const recentRevenue = useMemo(() => getRecentRevenue(sales), [sales]);
-  const visibleCategories = categories.filter((category) => category.enabled && (!settings.highTrafficMode || category.showInHighTraffic));
+  const visibleCategories = categories.filter((category) => category.enabled);
   const visibleCategoryIds = new Set(visibleCategories.map((category) => category.id));
   const enabledProducts = products.filter((product) => product.enabled && visibleCategoryIds.has(product.category));
   const target = activeSession?.targetSales ?? selectedSession?.targetSales ?? settings.defaultTargetSales;

@@ -36,7 +36,6 @@ const blankCategory = (sortOrder: number): ProductCategory => ({
   name: "",
   enabled: true,
   sortOrder,
-  showInHighTraffic: false,
   createdAt: now(),
   ...baseSync()
 });
@@ -601,10 +600,6 @@ function CategoryEditModal({
             <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
               表示する
-            </label>
-            <label className="flex items-center gap-3 rounded-md bg-white p-3 font-bold">
-              <input type="checkbox" checked={draft.showInHighTraffic} onChange={(event) => setDraft({ ...draft, showInHighTraffic: event.target.checked })} />
-              ピークモードで表示
             </label>
           </div>
           {localError && <div className="mt-3 rounded-md bg-danger/10 p-3 text-sm font-bold text-danger">{localError}</div>}
